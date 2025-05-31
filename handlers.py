@@ -77,7 +77,7 @@ def create_main_keyboard() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="🟢 Свободные игры", callback_data="show_available_games_0")],
         [InlineKeyboardButton(text="👤 Мои игры", callback_data="show_my_games_0")],
         [InlineKeyboardButton(text="📝 Записаться", callback_data="register_menu_0")],
-        [InlineKeyboardButton(text="❌ Отписаться", callback_data="unregister_menu_0")]
+        [InlineKeyboardButton(text="❌ Удалиться из игры", callback_data="unregister_menu_0")]
     ])
     return keyboard
 
@@ -274,7 +274,7 @@ async def show_my_games(message_or_callback, db: Database, user_id: int, page: i
 
     # Кнопки действий
     keyboard.append([
-        InlineKeyboardButton(text="❌ Отписаться", callback_data="unregister_menu_0"),
+        InlineKeyboardButton(text="❌ Удалиться из игры", callback_data="unregister_menu_0"),
         InlineKeyboardButton(text="🟢 Свободные игры", callback_data="show_available_games_0")
     ])
 
@@ -317,7 +317,7 @@ async def unregister_menu_callback(callback: CallbackQuery, db: Database, bot):
     """Меню отписки от игры"""
     page = int(callback.data.split("_")[-1])
     keyboard = await create_date_selection_keyboard(db, "unregister", user_id=callback.from_user.id, page=page)
-    text = "❌ <b>Выберите дату для отписки:</b>\n\nПоказаны только ваши игры"
+    text = "❌ <b>Выберите дату:</b>\n\nПоказаны только ваши игры"
 
     await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
     await callback.answer()
@@ -395,10 +395,10 @@ async def unregister_player_callback(callback: CallbackQuery, db: Database, bot)
         date_formatted = date.strftime("%d.%m.%Y")
         user_name = get_user_display_name(callback.from_user)
 
-        await callback.answer(f"✅ Вы отписаны от {date_formatted}", show_alert=True)
+        await callback.answer(f"✅ Вы удалены из {date_formatted}", show_alert=True)
 
         # Отправить уведомление всем пользователям
-        notification_message = f"⚠️ <b>Игрок отписался</b>\n\n{user_name} отписался от игры <b>{date_formatted}</b>\n\n🔓 Освободилось место!"
+        notification_message = f"⚠️ <b>Игрок удалился</b>\n\n{user_name} удалился из игры <b>{date_formatted}</b>\n\n🔓 Освободилось место!"
         await send_notification_to_all_users(bot, db, notification_message, exclude_user_id=user_id)
 
         # Вернуться в главное меню
@@ -410,7 +410,7 @@ async def unregister_player_callback(callback: CallbackQuery, db: Database, bot)
         )
         await callback.message.edit_text(text, reply_markup=create_main_keyboard(), parse_mode="HTML")
     else:
-        await callback.answer("❌ Ошибка отписки", show_alert=True)
+        await callback.answer("❌ Ошибка удаления", show_alert=True)
 
 @router.callback_query(F.data == "back_to_main")
 async def back_to_main_callback(callback: CallbackQuery, bot):
