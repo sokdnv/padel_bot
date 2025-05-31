@@ -15,30 +15,30 @@ class GameSlot:
     player_2: Optional[int] = None
     player_3: Optional[int] = None
     player_4: Optional[int] = None
-    
+
     def get_players(self) -> List[int]:
         """Получить список зарегистрированных игроков"""
         return [p for p in [self.player_1, self.player_2, self.player_3, self.player_4] if p is not None]
-    
+
     def free_slots(self) -> int:
         """Количество свободных мест"""
         return 4 - len(self.get_players())
-    
+
     def is_full(self) -> bool:
         """Проверить, заполнена ли игра"""
         return self.free_slots() == 0
-    
+
     def has_player(self, user_id: int) -> bool:
         """Проверить, зарегистрирован ли игрок"""
         return user_id in self.get_players()
 
 class Database:
     """Класс для работы с базой данных"""
-    
+
     def __init__(self, database_url: str):
         self.database_url = database_url
         self.pool: Optional[asyncpg.Pool] = None
-    
+
     async def connect(self):
         """Подключение к базе данных"""
         try:
@@ -49,37 +49,37 @@ class Database:
         except Exception as e:
             logger.error(f"Ошибка подключения к базе данных: {e}")
             raise
-    
+
     async def disconnect(self):
         """Отключение от базы данных"""
         if self.pool:
             await self.pool.close()
             logger.info("Соединение с базой данных закрыто")
-    
+
     async def create_tables(self):
         """Создание таблиц"""
         query = """
-        CREATE TABLE IF NOT EXISTS games (
-            date DATE PRIMARY KEY,
-            player_1 BIGINT,
-            player_2 BIGINT,
-            player_3 BIGINT,
-            player_4 BIGINT
-        );
-        
-        CREATE TABLE IF NOT EXISTS users (
-            user_id BIGINT PRIMARY KEY,
-            username VARCHAR(255),
-            first_name VARCHAR(255),
-            last_name VARCHAR(255),
-            registered_at TIMESTAMP DEFAULT NOW()
-        );
-        """
-        
+                CREATE TABLE IF NOT EXISTS games (
+                                                     date DATE PRIMARY KEY,
+                                                     player_1 BIGINT,
+                                                     player_2 BIGINT,
+                                                     player_3 BIGINT,
+                                                     player_4 BIGINT
+                );
+
+                CREATE TABLE IF NOT EXISTS users (
+                                                     user_id BIGINT PRIMARY KEY,
+                                                     username VARCHAR(255),
+                                                     first_name VARCHAR(255),
+                                                     last_name VARCHAR(255),
+                                                     registered_at TIMESTAMP DEFAULT NOW()
+                ); \
+                """
+
         async with self.pool.acquire() as conn:
             await conn.execute(query)
         logger.info("Таблицы созданы")
-    
+
     async def initialize_games(self):
         """Инициализация игр на ближайшие 3 месяца (только четверги)"""
         # Найти ближайший четверг
@@ -87,39 +87,55 @@ class Database:
         days_until_thursday = (3 - today.weekday()) % 7
         if days_until_thursday == 0 and datetime.now().hour >= 17:
             days_until_thursday = 7  # Если сегодня четверг и время прошло
-        
+
         next_thursday = today + timedelta(days=days_until_thursday)
-        
+
         # Создать записи на 3 месяца вперед
         thursdays = []
         current_date = next_thursday
         for _ in range(12):  # Примерно 3 месяца
             thursdays.append(current_date)
             current_date += timedelta(weeks=1)
-        
+
+        # Добавляем 29 августа как последнюю летнюю игру
+        from datetime import date
+        august_29 = date(2025, 8, 29)
+        if august_29 not in thursdays and august_29 >= today:
+            thursdays.append(august_29)
+
+        # Сортируем по дате
+        thursdays.sort()
+
         async with self.pool.acquire() as conn:
             for thursday in thursdays:
                 await conn.execute("""
-                    INSERT INTO games (date) 
-                    VALUES ($1) 
-                    ON CONFLICT (date) DO NOTHING
-                """, thursday)
-        
-        logger.info(f"Инициализированы игры на {len(thursdays)} четвергов")
-    
-    async def get_upcoming_games(self) -> List[GameSlot]:
-        """Получить предстоящие игры"""
-        query = """
-        SELECT date, player_1, player_2, player_3, player_4 
-        FROM games 
-        WHERE date >= CURRENT_DATE 
-        ORDER BY date
-        LIMIT 8
-        """
-        
+                                   INSERT INTO games (date)
+                                   VALUES ($1)
+                                   ON CONFLICT (date) DO NOTHING
+                                   """, thursday)
+
+        logger.info(f"Инициализированы игры на {len(thursdays)} дат (включая 29.08.2025)")
+
+    async def get_all_users(self) -> List[int]:
+        """Получить список всех зарегистрированных пользователей"""
+        query = "SELECT user_id FROM users ORDER BY registered_at"
         async with self.pool.acquire() as conn:
             rows = await conn.fetch(query)
-        
+        return [row['user_id'] for row in rows]
+
+    async def get_upcoming_games(self, limit: int = 20, offset: int = 0) -> List[GameSlot]:
+        """Получить предстоящие игры с пагинацией"""
+        query = """
+                SELECT date, player_1, player_2, player_3, player_4
+                FROM games
+                WHERE date >= CURRENT_DATE
+                ORDER BY date
+                LIMIT $1 OFFSET $2 \
+                """
+
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(query, limit, offset)
+
         return [GameSlot(
             date=datetime.combine(row['date'], datetime.min.time()),
             player_1=row['player_1'],
@@ -127,7 +143,51 @@ class Database:
             player_3=row['player_3'],
             player_4=row['player_4']
         ) for row in rows]
-    
+
+    async def get_available_games(self, limit: int = 20, offset: int = 0) -> List[GameSlot]:
+        """Получить игры со свободными местами"""
+        query = """
+                SELECT date, player_1, player_2, player_3, player_4
+                FROM games
+                WHERE date >= CURRENT_DATE
+                  AND (player_1 IS NULL OR player_2 IS NULL OR player_3 IS NULL OR player_4 IS NULL)
+                ORDER BY date
+                LIMIT $1 OFFSET $2 \
+                """
+
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(query, limit, offset)
+
+        return [GameSlot(
+            date=datetime.combine(row['date'], datetime.min.time()),
+            player_1=row['player_1'],
+            player_2=row['player_2'],
+            player_3=row['player_3'],
+            player_4=row['player_4']
+        ) for row in rows]
+
+    async def get_user_games(self, user_id: int, limit: int = 20, offset: int = 0) -> List[GameSlot]:
+        """Получить игры пользователя"""
+        query = """
+                SELECT date, player_1, player_2, player_3, player_4
+                FROM games
+                WHERE date >= CURRENT_DATE
+                  AND (player_1 = $1 OR player_2 = $1 OR player_3 = $1 OR player_4 = $1)
+                ORDER BY date
+                LIMIT $2 OFFSET $3 \
+                """
+
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(query, user_id, limit, offset)
+
+        return [GameSlot(
+            date=datetime.combine(row['date'], datetime.min.time()),
+            player_1=row['player_1'],
+            player_2=row['player_2'],
+            player_3=row['player_3'],
+            player_4=row['player_4']
+        ) for row in rows]
+
     async def register_player(self, date: datetime, user_id: int) -> bool:
         """Записать игрока на игру"""
         async with self.pool.acquire() as conn:
@@ -136,15 +196,15 @@ class Database:
                 "SELECT player_1, player_2, player_3, player_4 FROM games WHERE date = $1",
                 date.date()
             )
-            
+
             if not game:
                 return False
-            
+
             # Проверить, не записан ли игрок уже
             players = [game['player_1'], game['player_2'], game['player_3'], game['player_4']]
             if user_id in players:
                 return False
-            
+
             # Найти свободное место
             for i, player in enumerate(players, 1):
                 if player is None:
@@ -154,9 +214,9 @@ class Database:
                     )
                     logger.info(f"Игрок {user_id} записан на {date.date()}")
                     return True
-            
+
             return False  # Нет свободных мест
-    
+
     async def unregister_player(self, date: datetime, user_id: int) -> bool:
         """Отписать игрока от игры"""
         async with self.pool.acquire() as conn:
@@ -164,23 +224,23 @@ class Database:
                 "SELECT player_1, player_2, player_3, player_4 FROM games WHERE date = $1",
                 date.date()
             )
-            
+
             if not game:
                 return False
-            
+
             # Найти игрока и удалить
             players = [game['player_1'], game['player_2'], game['player_3'], game['player_4']]
             for i, player in enumerate(players, 1):
                 if player == user_id:
                     await conn.execute(
-                        f"UPDATE games SET player_{i} = NULL WHERE date = $2",
-                        date.date()
+                        f"UPDATE games SET player_{i} = $1 WHERE date = $2",
+                        None, date.date()
                     )
                     logger.info(f"Игрок {user_id} отписан от {date.date()}")
                     return True
-            
+
             return False
-    
+
     async def get_game_by_date(self, date: datetime) -> Optional[GameSlot]:
         """Получить игру по дате"""
         async with self.pool.acquire() as conn:
@@ -188,10 +248,10 @@ class Database:
                 "SELECT date, player_1, player_2, player_3, player_4 FROM games WHERE date = $1",
                 date.date()
             )
-        
+
         if not row:
             return None
-        
+
         return GameSlot(
             date=datetime.combine(row['date'], datetime.min.time()),
             player_1=row['player_1'],
@@ -199,16 +259,72 @@ class Database:
             player_3=row['player_3'],
             player_4=row['player_4']
         )
-    
+
+    async def get_users_info(self, user_ids: List[int]) -> dict:
+        """Получить информацию о пользователях"""
+        if not user_ids:
+            return {}
+
+        placeholders = ', '.join([f'${i+1}' for i in range(len(user_ids))])
+        query = f"""
+        SELECT user_id, username, first_name, last_name 
+        FROM users 
+        WHERE user_id IN ({placeholders})
+        """
+
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(query, *user_ids)
+
+        users_info = {}
+        for row in rows:
+            user_id = row['user_id']
+            if row['username']:
+                display_name = f"@{row['username']}"
+            elif row['first_name']:
+                display_name = row['first_name']
+                if row['last_name']:
+                    display_name += f" {row['last_name']}"
+            else:
+                display_name = f"User{user_id}"
+
+            users_info[user_id] = display_name
+
+        return users_info
+
+    async def count_upcoming_games(self) -> int:
+        """Подсчитать общее количество предстоящих игр"""
+        query = "SELECT COUNT(*) FROM games WHERE date >= CURRENT_DATE"
+        async with self.pool.acquire() as conn:
+            return await conn.fetchval(query)
+
+    async def count_available_games(self) -> int:
+        """Подсчитать количество игр со свободными местами"""
+        query = """
+                SELECT COUNT(*) FROM games
+                WHERE date >= CURRENT_DATE
+                  AND (player_1 IS NULL OR player_2 IS NULL OR player_3 IS NULL OR player_4 IS NULL) \
+                """
+        async with self.pool.acquire() as conn:
+            return await conn.fetchval(query)
+
+    async def count_user_games(self, user_id: int) -> int:
+        """Подсчитать количество игр пользователя"""
+        query = """
+                SELECT COUNT(*) FROM games
+                WHERE date >= CURRENT_DATE
+                  AND (player_1 = $1 OR player_2 = $1 OR player_3 = $1 OR player_4 = $1) \
+                """
+        async with self.pool.acquire() as conn:
+            return await conn.fetchval(query, user_id)
+
     async def save_user(self, user_id: int, username: str = None, first_name: str = None, last_name: str = None):
         """Сохранить информацию о пользователе"""
         async with self.pool.acquire() as conn:
             await conn.execute("""
-                INSERT INTO users (user_id, username, first_name, last_name) 
-                VALUES ($1, $2, $3, $4) 
-                ON CONFLICT (user_id) DO UPDATE SET 
-                    username = EXCLUDED.username,
-                    first_name = EXCLUDED.first_name,
-                    last_name = EXCLUDED.last_name
-            """, user_id, username, first_name, last_name)
-
+                               INSERT INTO users (user_id, username, first_name, last_name)
+                               VALUES ($1, $2, $3, $4)
+                               ON CONFLICT (user_id) DO UPDATE SET
+                                                                   username = EXCLUDED.username,
+                                                                   first_name = EXCLUDED.first_name,
+                                                                   last_name = EXCLUDED.last_name
+                               """, user_id, username, first_name, last_name)

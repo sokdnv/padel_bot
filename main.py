@@ -19,19 +19,21 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 class DatabaseMiddleware(BaseMiddleware):
-    """Middleware для передачи объекта базы данных в handlers"""
+    """Middleware для передачи объекта базы данных и бота в handlers"""
 
-    def __init__(self, db: Database):
+    def __init__(self, db: Database, bot: Bot):
         self.db = db
+        self.bot = bot
         super().__init__()
 
     async def __call__(
-            self,
-            handler: Callable[[TelegramObject, Dict[str, Any]], Awaitable[Any]],
-            event: TelegramObject,
-            data: Dict[str, Any]
+        self,
+        handler: Callable[[TelegramObject, Dict[str, Any]], Awaitable[Any]],
+        event: TelegramObject,
+        data: Dict[str, Any]
     ) -> Any:
         data["db"] = self.db
+        data["bot"] = self.bot
         return await handler(event, data)
 
 async def main():
@@ -58,9 +60,10 @@ async def main():
     try:
         await db.connect()
 
-        # Добавление middleware для базы данных
-        dp.message.middleware(DatabaseMiddleware(db))
-        dp.callback_query.middleware(DatabaseMiddleware(db))
+        # Добавление middleware для базы данных и бота
+        middleware = DatabaseMiddleware(db, bot)
+        dp.message.middleware(middleware)
+        dp.callback_query.middleware(middleware)
 
         # Регистрация роутеров
         dp.include_router(router)
@@ -74,3 +77,6 @@ async def main():
     finally:
         await db.disconnect()
         await bot.session.close()
+
+if __name__ == "__main__":
+    asyncio.run(main())
