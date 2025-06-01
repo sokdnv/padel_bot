@@ -169,7 +169,6 @@ async def start_command(message: Message, db: Database, bot):
     text = (
         "🎾 <b>Добро пожаловать в бот записи на падел!</b>\n\n"
         "Мы играем каждый четверг с 15:00 до 17:00\n"
-        "Максимум 4 игрока на корт\n\n"
         "Что хотите сделать?"
     )
 
@@ -355,14 +354,13 @@ async def register_player_callback(callback: CallbackQuery, db: Database, bot):
         await callback.answer(f"✅ Вы записаны на {date_formatted}", show_alert=True)
 
         # Отправить уведомление всем пользователям
-        notification_message = f"🎾 <b>Новая запись на игру!</b>\n\n{user_name} записался на <b>{date_formatted}</b>\n\n💡 Не забудьте записаться и вы!"
+        notification_message = f"🎾 <b>Новая запись на игру!</b>\n\n{user_name} записался на <b>{date_formatted}</b>"
         await send_notification_to_all_users(bot, db, notification_message, exclude_user_id=user_id)
 
         # Вернуться в главное меню
         text = (
             "🎾 <b>Добро пожаловать в бот записи на падел!</b>\n\n"
             "Мы играем каждый четверг с 15:00 до 17:00\n"
-            "Максимум 4 игрока на корт\n\n"
             "Что хотите сделать?"
         )
         await callback.message.edit_text(text, reply_markup=create_main_keyboard(), parse_mode="HTML")
@@ -405,7 +403,6 @@ async def unregister_player_callback(callback: CallbackQuery, db: Database, bot)
         text = (
             "🎾 <b>Добро пожаловать в бот записи на падел!</b>\n\n"
             "Мы играем каждый четверг с 15:00 до 17:00\n"
-            "Максимум 4 игрока на корт\n\n"
             "Что хотите сделать?"
         )
         await callback.message.edit_text(text, reply_markup=create_main_keyboard(), parse_mode="HTML")
@@ -418,7 +415,6 @@ async def back_to_main_callback(callback: CallbackQuery, bot):
     text = (
         "🎾 <b>Добро пожаловать в бот записи на падел!</b>\n\n"
         "Мы играем каждый четверг с 15:00 до 17:00\n"
-        "Максимум 4 игрока на корт\n\n"
         "Что хотите сделать?"
     )
     await callback.message.edit_text(text, reply_markup=create_main_keyboard(), parse_mode="HTML")
