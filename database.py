@@ -1,4 +1,3 @@
-import asyncio
 import asyncpg
 import logging
 from datetime import datetime, timedelta
@@ -7,10 +6,15 @@ from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
 
+
 @dataclass
 class GameSlot:
     """Модель игрового слота"""
     date: datetime
+    time: datetime.time = None
+    duration: int = 120
+    location: Optional[str] = None
+    creator_id: Optional[int] = None
     player_1: Optional[int] = None
     player_2: Optional[int] = None
     player_3: Optional[int] = None
@@ -32,6 +36,7 @@ class GameSlot:
         """Проверить, зарегистрирован ли игрок"""
         return user_id in self.get_players()
 
+
 class Database:
     """Класс для работы с базой данных"""
 
@@ -43,8 +48,6 @@ class Database:
         """Подключение к базе данных"""
         try:
             self.pool = await asyncpg.create_pool(self.database_url)
-            await self.create_tables()
-            await self.initialize_games()
             logger.info("Подключение к базе данных установлено")
         except Exception as e:
             logger.error(f"Ошибка подключения к базе данных: {e}")
@@ -55,56 +58,6 @@ class Database:
         if self.pool:
             await self.pool.close()
             logger.info("Соединение с базой данных закрыто")
-
-    async def create_tables(self):
-        """Создание таблиц"""
-        query = """
-                CREATE TABLE IF NOT EXISTS games (
-                                                     date DATE PRIMARY KEY,
-                                                     player_1 BIGINT,
-                                                     player_2 BIGINT,
-                                                     player_3 BIGINT,
-                                                     player_4 BIGINT
-                );
-
-                CREATE TABLE IF NOT EXISTS users (
-                                                     user_id BIGINT PRIMARY KEY,
-                                                     username VARCHAR(255),
-                                                     first_name VARCHAR(255),
-                                                     last_name VARCHAR(255),
-                                                     registered_at TIMESTAMP DEFAULT NOW()
-                ); \
-                """
-
-        async with self.pool.acquire() as conn:
-            await conn.execute(query)
-        logger.info("Таблицы созданы")
-
-    async def initialize_games(self):
-        """Инициализация игр на ближайшие 3 месяца (только четверги)"""
-        # Найти ближайший четверг
-        today = datetime.now().date()
-        days_until_thursday = (3 - today.weekday()) % 7
-        if days_until_thursday == 0 and datetime.now().hour >= 17:
-            days_until_thursday = 7  # Если сегодня четверг и время прошло
-
-        next_thursday = today + timedelta(days=days_until_thursday)
-
-        # Создать записи на 3 месяца вперед
-        thursdays = []
-        current_date = next_thursday
-        for _ in range(12):  # Примерно 3 месяца
-            thursdays.append(current_date)
-            current_date += timedelta(weeks=1)
-
-        # Добавляем 29 августа как последнюю летнюю игру
-        from datetime import date
-        august_29 = date(2025, 8, 29)
-        if august_29 not in thursdays and august_29 >= today:
-            thursdays.append(august_29)
-
-        # Сортируем по дате
-        thursdays.sort()
 
         async with self.pool.acquire() as conn:
             for thursday in thursdays:
@@ -126,7 +79,7 @@ class Database:
     async def get_upcoming_games(self, limit: int = 20, offset: int = 0) -> List[GameSlot]:
         """Получить предстоящие игры с пагинацией"""
         query = """
-                SELECT date, player_1, player_2, player_3, player_4
+                SELECT date, player_1, player_2, player_3, player_4, time, duration, location
                 FROM games
                 WHERE date >= CURRENT_DATE
                 ORDER BY date
@@ -141,35 +94,53 @@ class Database:
             player_1=row['player_1'],
             player_2=row['player_2'],
             player_3=row['player_3'],
-            player_4=row['player_4']
+            player_4=row['player_4'],
+            time=row['time'].strftime('%H:%M') if row['time'] else None,
+            duration=row['duration'],
+            location=row['location']
         ) for row in rows]
 
-    async def get_available_games(self, limit: int = 20, offset: int = 0) -> List[GameSlot]:
+    async def get_available_games(self, limit: int = 20, offset: int = 0, exclude_user_id: int = None) -> List[GameSlot]:
         """Получить игры со свободными местами"""
-        query = """
-                SELECT date, player_1, player_2, player_3, player_4
-                FROM games
-                WHERE date >= CURRENT_DATE
-                  AND (player_1 IS NULL OR player_2 IS NULL OR player_3 IS NULL OR player_4 IS NULL)
-                ORDER BY date
-                LIMIT $1 OFFSET $2 \
-                """
-
-        async with self.pool.acquire() as conn:
-            rows = await conn.fetch(query, limit, offset)
+        if exclude_user_id:
+            query = """
+                    SELECT date, player_1, player_2, player_3, player_4, time, duration, location
+                    FROM games
+                    WHERE date >= CURRENT_DATE
+                      AND (player_1 IS NULL OR player_2 IS NULL OR player_3 IS NULL OR player_4 IS NULL)
+                      AND NOT (player_1 = $3 OR player_2 = $3 OR player_3 = $3 OR player_4 = $3)
+                    ORDER BY date
+                    LIMIT $1 OFFSET $2
+                    """
+            async with self.pool.acquire() as conn:
+                rows = await conn.fetch(query, limit, offset, exclude_user_id)
+        else:
+            query = """
+                    SELECT date, player_1, player_2, player_3, player_4, time, duration, location
+                    FROM games
+                    WHERE date >= CURRENT_DATE
+                      AND (player_1 IS NULL OR player_2 IS NULL OR player_3 IS NULL OR player_4 IS NULL)
+                    ORDER BY date
+                    LIMIT $1 OFFSET $2
+                    """
+            async with self.pool.acquire() as conn:
+                rows = await conn.fetch(query, limit, offset)
 
         return [GameSlot(
             date=datetime.combine(row['date'], datetime.min.time()),
             player_1=row['player_1'],
             player_2=row['player_2'],
             player_3=row['player_3'],
-            player_4=row['player_4']
+            player_4=row['player_4'],
+            time=row['time'].strftime('%H:%M') if row['time'] else None,
+            duration=row['duration'],
+            location=row['location']
         ) for row in rows]
 
     async def get_user_games(self, user_id: int, limit: int = 20, offset: int = 0) -> List[GameSlot]:
         """Получить игры пользователя"""
         query = """
-                SELECT date, player_1, player_2, player_3, player_4
+                SELECT date, player_1, player_2, player_3, player_4, time, duration, location
                 FROM games
                 WHERE date >= CURRENT_DATE
                   AND (player_1 = $1 OR player_2 = $1 OR player_3 = $1 OR player_4 = $1)
@@ -185,7 +156,10 @@ class Database:
             player_1=row['player_1'],
             player_2=row['player_2'],
             player_3=row['player_3'],
-            player_4=row['player_4']
+            player_4=row['player_4'],
+            time=row['time'].strftime('%H:%M') if row['time'] else None,
+            duration=row['duration'],
+            location=row['location']
         ) for row in rows]
 
     async def register_player(self, date: datetime, user_id: int) -> bool:
@@ -245,7 +219,7 @@ class Database:
         """Получить игру по дате"""
         async with self.pool.acquire() as conn:
             row = await conn.fetchrow(
-                "SELECT date, player_1, player_2, player_3, player_4 FROM games WHERE date = $1",
+                "SELECT date, player_1, player_2, player_3, player_4, time, duration, location FROM games WHERE date = $1",
                 date.date()
             )
 
@@ -257,7 +231,10 @@ class Database:
             player_1=row['player_1'],
             player_2=row['player_2'],
             player_3=row['player_3'],
-            player_4=row['player_4']
+            player_4=row['player_4'],
+            time=row['time'].strftime('%H:%M') if row['time'] else None,
+            duration=row['duration'],
+            location=row['location']
         )
 
     async def get_users_info(self, user_ids: List[int]) -> dict:
@@ -328,3 +305,14 @@ class Database:
                                                                    first_name = EXCLUDED.first_name,
                                                                    last_name = EXCLUDED.last_name
                                """, user_id, username, first_name, last_name)
+
+    async def count_available_games_excluding_user(self, user_id: int) -> int:
+        """Подсчитать количество игр со свободными местами, исключая игры пользователя"""
+        query = """
+                SELECT COUNT(*) FROM games
+                WHERE date >= CURRENT_DATE
+                  AND (player_1 IS NULL OR player_2 IS NULL OR player_3 IS NULL OR player_4 IS NULL)
+                  AND NOT (player_1 = $1 OR player_2 = $1 OR player_3 = $1 OR player_4 = $1)
+                """
+        async with self.pool.acquire() as conn:
+            return await conn.fetchval(query, user_id)

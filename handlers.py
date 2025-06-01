@@ -1,4 +1,3 @@
-
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.filters import Command
@@ -42,19 +41,29 @@ async def format_games_list(db: Database, games: List, users_info: dict = None) 
     """Форматировать список игр для отображения"""
     if not games:
         return "🚫 Нет доступных игр"
-
-    text = "🎾 <b>Игры в падел (Четверги 15:00-17:00)</b>\n\n"
-
+    text = ""
     for game in games:
         date_str = game.date.strftime("%d.%m.%Y")
         players_count = len(game.get_players())
         free_slots = game.free_slots()
-
-        status_emoji = "✅" if free_slots > 0 else "❌"
-
-        text += f"{status_emoji} <b>{date_str}</b>\n"
-        text += f"📊 Занято: {players_count}/4 | Свободно: {free_slots}\n"
-
+        status_emoji = "🔍" if free_slots > 0 else "✅"
+        # Формируем время и длительность
+        time_info = ""
+        if game.time:
+            time_info = f"{game.time}"
+            if game.duration:
+                hours = game.duration // 60
+                minutes = game.duration % 60
+                if minutes == 0:
+                    time_info += f" ({hours}ч)"
+                else:
+                    time_info += f" ({hours}ч {minutes}м)"
+        text += f"{status_emoji} <b>{date_str}</b>  "
+        if time_info:
+            text += f"{time_info}\n"
+        if game.location:
+            text += f"📍 {game.location}\n"
+        text += f"📊 Занято: {players_count}/4\n"
         if players_count > 0 and users_info:
             text += "👥 Записаны: "
             player_names = []
@@ -66,9 +75,7 @@ async def format_games_list(db: Database, games: List, users_info: dict = None) 
             text += ", ".join(player_names) + "\n"
         elif players_count > 0:
             text += f"👥 Записаны: {players_count} игрок(ов)\n"
-
         text += "\n"
-
     return text
 
 def create_main_keyboard() -> InlineKeyboardMarkup:
@@ -104,12 +111,12 @@ def create_pagination_keyboard(action: str, page: int, total_pages: int, has_nex
 
 async def create_date_selection_keyboard(db: Database, action: str, user_id: int = None, page: int = 0) -> InlineKeyboardMarkup:
     """Создать клавиатуру выбора даты с пагинацией"""
-    GAMES_PER_PAGE = 6
+    GAMES_PER_PAGE = 4
     offset = page * GAMES_PER_PAGE
 
     if action == "register":
-        games = await db.get_available_games(limit=GAMES_PER_PAGE, offset=offset)
-        total_count = await db.count_available_games()
+        games = await db.get_available_games(limit=GAMES_PER_PAGE, offset=offset, exclude_user_id=user_id)
+        total_count = await db.count_available_games_excluding_user(user_id) if user_id else await db.count_available_games()
     elif action == "unregister" and user_id:
         games = await db.get_user_games(user_id, limit=GAMES_PER_PAGE, offset=offset)
         total_count = await db.count_user_games(user_id)
@@ -168,7 +175,6 @@ async def start_command(message: Message, db: Database, bot):
 
     text = (
         "🎾 <b>Добро пожаловать в бот записи на падел!</b>\n\n"
-        "Мы играем каждый четверг с 15:00 до 17:00\n"
         "Что хотите сделать?"
     )
 
@@ -181,7 +187,7 @@ async def games_command(message: Message, db: Database, bot):
 
 async def show_available_games(message_or_callback, db: Database, page: int = 0, edit: bool = True):
     """Показать свободные игры"""
-    GAMES_PER_PAGE = 6
+    GAMES_PER_PAGE = 4
     offset = page * GAMES_PER_PAGE
 
     games = await db.get_available_games(limit=GAMES_PER_PAGE, offset=offset)
@@ -235,7 +241,7 @@ async def show_available_games(message_or_callback, db: Database, page: int = 0,
 
 async def show_my_games(message_or_callback, db: Database, user_id: int, page: int = 0, edit: bool = True):
     """Показать игры пользователя"""
-    GAMES_PER_PAGE = 6
+    GAMES_PER_PAGE = 4
     offset = page * GAMES_PER_PAGE
 
     games = await db.get_user_games(user_id, limit=GAMES_PER_PAGE, offset=offset)
@@ -305,8 +311,8 @@ async def show_my_games_callback(callback: CallbackQuery, db: Database, bot):
 async def register_menu_callback(callback: CallbackQuery, db: Database, bot):
     """Меню записи на игру"""
     page = int(callback.data.split("_")[-1])
-    keyboard = await create_date_selection_keyboard(db, "register", page=page)
-    text = "📝 <b>Выберите дату для записи:</b>\n\nДоступны только даты со свободными местами"
+    keyboard = await create_date_selection_keyboard(db, "register", user_id=callback.from_user.id, page=page)
+    text = "📝 <b>Выберите дату для записи:</b>\n\n"
 
     await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
     await callback.answer()
@@ -316,7 +322,7 @@ async def unregister_menu_callback(callback: CallbackQuery, db: Database, bot):
     """Меню отписки от игры"""
     page = int(callback.data.split("_")[-1])
     keyboard = await create_date_selection_keyboard(db, "unregister", user_id=callback.from_user.id, page=page)
-    text = "❌ <b>Выберите дату:</b>\n\nПоказаны только ваши игры"
+    text = "❌ <b>Выберите дату:</b>\n\n"
 
     await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
     await callback.answer()
@@ -360,7 +366,6 @@ async def register_player_callback(callback: CallbackQuery, db: Database, bot):
         # Вернуться в главное меню
         text = (
             "🎾 <b>Добро пожаловать в бот записи на падел!</b>\n\n"
-            "Мы играем каждый четверг с 15:00 до 17:00\n"
             "Что хотите сделать?"
         )
         await callback.message.edit_text(text, reply_markup=create_main_keyboard(), parse_mode="HTML")
@@ -402,7 +407,6 @@ async def unregister_player_callback(callback: CallbackQuery, db: Database, bot)
         # Вернуться в главное меню
         text = (
             "🎾 <b>Добро пожаловать в бот записи на падел!</b>\n\n"
-            "Мы играем каждый четверг с 15:00 до 17:00\n"
             "Что хотите сделать?"
         )
         await callback.message.edit_text(text, reply_markup=create_main_keyboard(), parse_mode="HTML")
@@ -414,7 +418,6 @@ async def back_to_main_callback(callback: CallbackQuery, bot):
     """Вернуться в главное меню"""
     text = (
         "🎾 <b>Добро пожаловать в бот записи на падел!</b>\n\n"
-        "Мы играем каждый четверг с 15:00 до 17:00\n"
         "Что хотите сделать?"
     )
     await callback.message.edit_text(text, reply_markup=create_main_keyboard(), parse_mode="HTML")
