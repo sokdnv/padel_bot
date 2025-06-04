@@ -335,7 +335,7 @@ class Database:
         async with self.pool.acquire() as conn:
             return await conn.fetchval(query, user_id)
 
-    async def get_upcoming_games_with_time(self, limit: int = 100, offset: int = 0) -> List[GameSlot]:
+    async def get_upcoming_games_with_time(self, limit: int = 100, offset: int = 0) -> list[GameSlot]:
         """Получить предстоящие игры с указанным временем"""
         query = """
                 SELECT date, \
