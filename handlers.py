@@ -1,14 +1,15 @@
-from aiogram import Router, F
-from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
-from aiogram.filters import Command
-from datetime import datetime
 import logging
-from typing import List
+from datetime import datetime
+
+from aiogram import F, Router
+from aiogram.filters import Command
+from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 from database import Database
 
 logger = logging.getLogger(__name__)
 router = Router()
+
 
 async def send_notification_to_all_users(bot, db: Database, message: str, exclude_user_id: int = None):
     """Отправить уведомление всем пользователям"""
@@ -28,16 +29,17 @@ async def send_notification_to_all_users(bot, db: Database, message: str, exclud
     except Exception as e:
         logger.error(f"Ошибка при отправке уведомлений: {e}")
 
+
 def get_user_display_name(user) -> str:
     """Получить отображаемое имя пользователя"""
     if user.username:
         return f"@{user.username}"
-    elif user.first_name:
+    if user.first_name:
         return user.first_name
-    else:
-        return f"User{user.id}"
+    return f"User{user.id}"
 
-async def format_games_list(db: Database, games: List, users_info: dict = None) -> str:
+
+async def format_games_list(db: Database, games: list, users_info: dict = None) -> str:
     """Форматировать список игр для отображения"""
     if not games:
         return "🚫 Нет доступных игр"
@@ -78,30 +80,36 @@ async def format_games_list(db: Database, games: List, users_info: dict = None) 
         text += "\n"
     return text
 
+
 def create_main_keyboard() -> InlineKeyboardMarkup:
     """Создать главную клавиатуру"""
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🟢 Свободные игры", callback_data="show_available_games_0")],
-        [InlineKeyboardButton(text="👤 Мои игры", callback_data="show_my_games_0")],
-        [InlineKeyboardButton(text="📝 Записаться", callback_data="register_menu_0")],
-        [InlineKeyboardButton(text="❌ Удалиться из игры", callback_data="unregister_menu_0")]
-    ])
+    keyboard = InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="🟢 Свободные игры", callback_data="show_available_games_0")],
+            [InlineKeyboardButton(text="👤 Мои игры", callback_data="show_my_games_0")],
+            [InlineKeyboardButton(text="📝 Записаться", callback_data="register_menu_0")],
+            [InlineKeyboardButton(text="❌ Удалиться из игры", callback_data="unregister_menu_0")],
+        ],
+    )
     return keyboard
 
-def create_pagination_keyboard(action: str, page: int, total_pages: int, has_next: bool = False, has_prev: bool = False) -> InlineKeyboardMarkup:
+
+def create_pagination_keyboard(
+    action: str, page: int, total_pages: int, has_next: bool = False, has_prev: bool = False,
+) -> InlineKeyboardMarkup:
     """Создать клавиатуру с пагинацией"""
     keyboard = []
 
     # Кнопки навигации
     nav_buttons = []
     if has_prev:
-        nav_buttons.append(InlineKeyboardButton(text="⬅️", callback_data=f"{action}_{page-1}"))
+        nav_buttons.append(InlineKeyboardButton(text="⬅️", callback_data=f"{action}_{page - 1}"))
 
     if total_pages > 1:
-        nav_buttons.append(InlineKeyboardButton(text=f"{page+1}/{total_pages}", callback_data="current_page"))
+        nav_buttons.append(InlineKeyboardButton(text=f"{page + 1}/{total_pages}", callback_data="current_page"))
 
     if has_next:
-        nav_buttons.append(InlineKeyboardButton(text="➡️", callback_data=f"{action}_{page+1}"))
+        nav_buttons.append(InlineKeyboardButton(text="➡️", callback_data=f"{action}_{page + 1}"))
 
     if nav_buttons:
         keyboard.append(nav_buttons)
@@ -109,21 +117,26 @@ def create_pagination_keyboard(action: str, page: int, total_pages: int, has_nex
     # Кнопка "Назад в меню"
     keyboard.append([InlineKeyboardButton(text="🏠 Главное меню", callback_data="back_to_main")])
 
-async def create_date_selection_keyboard(db: Database, action: str, user_id: int = None, page: int = 0) -> InlineKeyboardMarkup:
+
+async def create_date_selection_keyboard(
+    db: Database, action: str, user_id: int = None, page: int = 0,
+) -> InlineKeyboardMarkup:
     """Создать клавиатуру выбора даты с пагинацией"""
     GAMES_PER_PAGE = 4
     offset = page * GAMES_PER_PAGE
 
     if action == "register":
         games = await db.get_available_games(limit=GAMES_PER_PAGE, offset=offset, exclude_user_id=user_id)
-        total_count = await db.count_available_games_excluding_user(user_id) if user_id else await db.count_available_games()
+        total_count = (
+            await db.count_available_games_excluding_user(user_id) if user_id else await db.count_available_games()
+        )
     elif action == "unregister" and user_id:
         games = await db.get_user_games(user_id, limit=GAMES_PER_PAGE, offset=offset)
         total_count = await db.count_user_games(user_id)
     else:
-        return InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="🏠 Главное меню", callback_data="back_to_main")]
-        ])
+        return InlineKeyboardMarkup(
+            inline_keyboard=[[InlineKeyboardButton(text="🏠 Главное меню", callback_data="back_to_main")]],
+        )
 
     keyboard = []
 
@@ -148,13 +161,13 @@ async def create_date_selection_keyboard(db: Database, action: str, user_id: int
 
     nav_buttons = []
     if has_prev:
-        nav_buttons.append(InlineKeyboardButton(text="⬅️", callback_data=f"{action}_menu_{page-1}"))
+        nav_buttons.append(InlineKeyboardButton(text="⬅️", callback_data=f"{action}_menu_{page - 1}"))
 
     if total_pages > 1:
-        nav_buttons.append(InlineKeyboardButton(text=f"{page+1}/{total_pages}", callback_data="current_page"))
+        nav_buttons.append(InlineKeyboardButton(text=f"{page + 1}/{total_pages}", callback_data="current_page"))
 
     if has_next:
-        nav_buttons.append(InlineKeyboardButton(text="➡️", callback_data=f"{action}_menu_{page+1}"))
+        nav_buttons.append(InlineKeyboardButton(text="➡️", callback_data=f"{action}_menu_{page + 1}"))
 
     if nav_buttons:
         keyboard.append(nav_buttons)
@@ -163,27 +176,24 @@ async def create_date_selection_keyboard(db: Database, action: str, user_id: int
 
     return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
+
 @router.message(Command("start"))
 async def start_command(message: Message, db: Database, bot):
     """Обработчик команды /start"""
     await db.save_user(
-        message.from_user.id,
-        message.from_user.username,
-        message.from_user.first_name,
-        message.from_user.last_name
+        message.from_user.id, message.from_user.username, message.from_user.first_name, message.from_user.last_name,
     )
 
-    text = (
-        "🎾 <b>Добро пожаловать в бот записи на падел!</b>\n\n"
-        "Что хотите сделать?"
-    )
+    text = "🎾 <b>Добро пожаловать в бот записи на падел!</b>\n\nЧто хотите сделать?"
 
     await message.answer(text, reply_markup=create_main_keyboard(), parse_mode="HTML")
+
 
 @router.message(Command("games"))
 async def games_command(message: Message, db: Database, bot):
     """Обработчик команды /games"""
     await show_available_games(message, db, page=0, edit=False)
+
 
 async def show_available_games(message_or_callback, db: Database, page: int = 0, edit: bool = True):
     """Показать свободные игры"""
@@ -212,32 +222,35 @@ async def show_available_games(message_or_callback, db: Database, page: int = 0,
     # Кнопки навигации
     nav_buttons = []
     if page > 0:
-        nav_buttons.append(InlineKeyboardButton(text="⬅️", callback_data=f"show_available_games_{page-1}"))
+        nav_buttons.append(InlineKeyboardButton(text="⬅️", callback_data=f"show_available_games_{page - 1}"))
 
     if total_pages > 1:
-        nav_buttons.append(InlineKeyboardButton(text=f"{page+1}/{total_pages}", callback_data="current_page"))
+        nav_buttons.append(InlineKeyboardButton(text=f"{page + 1}/{total_pages}", callback_data="current_page"))
 
     if page < total_pages - 1:
-        nav_buttons.append(InlineKeyboardButton(text="➡️", callback_data=f"show_available_games_{page+1}"))
+        nav_buttons.append(InlineKeyboardButton(text="➡️", callback_data=f"show_available_games_{page + 1}"))
 
     if nav_buttons:
         keyboard.append(nav_buttons)
 
     # Кнопки действий
-    keyboard.append([
-        InlineKeyboardButton(text="📝 Записаться", callback_data="register_menu_0"),
-        InlineKeyboardButton(text="👤 Мои игры", callback_data="show_my_games_0")
-    ])
+    keyboard.append(
+        [
+            InlineKeyboardButton(text="📝 Записаться", callback_data="register_menu_0"),
+            InlineKeyboardButton(text="👤 Мои игры", callback_data="show_my_games_0"),
+        ],
+    )
 
     # Кнопка "Главное меню"
     keyboard.append([InlineKeyboardButton(text="🏠 Главное меню", callback_data="back_to_main")])
 
     reply_markup = InlineKeyboardMarkup(inline_keyboard=keyboard)
 
-    if edit and hasattr(message_or_callback, 'message'):
+    if edit and hasattr(message_or_callback, "message"):
         await message_or_callback.message.edit_text(text, reply_markup=reply_markup, parse_mode="HTML")
     else:
         await message_or_callback.answer(text, reply_markup=reply_markup, parse_mode="HTML")
+
 
 async def show_my_games(message_or_callback, db: Database, user_id: int, page: int = 0, edit: bool = True):
     """Показать игры пользователя"""
@@ -266,32 +279,35 @@ async def show_my_games(message_or_callback, db: Database, user_id: int, page: i
     # Кнопки навигации
     nav_buttons = []
     if page > 0:
-        nav_buttons.append(InlineKeyboardButton(text="⬅️", callback_data=f"show_my_games_{page-1}"))
+        nav_buttons.append(InlineKeyboardButton(text="⬅️", callback_data=f"show_my_games_{page - 1}"))
 
     if total_pages > 1:
-        nav_buttons.append(InlineKeyboardButton(text=f"{page+1}/{total_pages}", callback_data="current_page"))
+        nav_buttons.append(InlineKeyboardButton(text=f"{page + 1}/{total_pages}", callback_data="current_page"))
 
     if page < total_pages - 1:
-        nav_buttons.append(InlineKeyboardButton(text="➡️", callback_data=f"show_my_games_{page+1}"))
+        nav_buttons.append(InlineKeyboardButton(text="➡️", callback_data=f"show_my_games_{page + 1}"))
 
     if nav_buttons:
         keyboard.append(nav_buttons)
 
     # Кнопки действий
-    keyboard.append([
-        InlineKeyboardButton(text="❌ Удалиться из игры", callback_data="unregister_menu_0"),
-        InlineKeyboardButton(text="🟢 Свободные игры", callback_data="show_available_games_0")
-    ])
+    keyboard.append(
+        [
+            InlineKeyboardButton(text="❌ Удалиться из игры", callback_data="unregister_menu_0"),
+            InlineKeyboardButton(text="🟢 Свободные игры", callback_data="show_available_games_0"),
+        ],
+    )
 
     # Кнопка "Главное меню"
     keyboard.append([InlineKeyboardButton(text="🏠 Главное меню", callback_data="back_to_main")])
 
     reply_markup = InlineKeyboardMarkup(inline_keyboard=keyboard)
 
-    if edit and hasattr(message_or_callback, 'message'):
+    if edit and hasattr(message_or_callback, "message"):
         await message_or_callback.message.edit_text(text, reply_markup=reply_markup, parse_mode="HTML")
     else:
         await message_or_callback.answer(text, reply_markup=reply_markup, parse_mode="HTML")
+
 
 @router.callback_query(F.data.startswith("show_available_games_"))
 async def show_available_games_callback(callback: CallbackQuery, db: Database, bot):
@@ -300,12 +316,14 @@ async def show_available_games_callback(callback: CallbackQuery, db: Database, b
     await show_available_games(callback, db, page=page, edit=True)
     await callback.answer()
 
+
 @router.callback_query(F.data.startswith("show_my_games_"))
 async def show_my_games_callback(callback: CallbackQuery, db: Database, bot):
     """Показать мои игры"""
     page = int(callback.data.split("_")[-1])
     await show_my_games(callback, db, callback.from_user.id, page=page, edit=True)
     await callback.answer()
+
 
 @router.callback_query(F.data.startswith("register_menu_"))
 async def register_menu_callback(callback: CallbackQuery, db: Database, bot):
@@ -317,6 +335,7 @@ async def register_menu_callback(callback: CallbackQuery, db: Database, bot):
     await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
     await callback.answer()
 
+
 @router.callback_query(F.data.startswith("unregister_menu_"))
 async def unregister_menu_callback(callback: CallbackQuery, db: Database, bot):
     """Меню отписки от игры"""
@@ -326,6 +345,7 @@ async def unregister_menu_callback(callback: CallbackQuery, db: Database, bot):
 
     await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
     await callback.answer()
+
 
 @router.callback_query(F.data.startswith("register_"))
 async def register_player_callback(callback: CallbackQuery, db: Database, bot):
@@ -364,13 +384,11 @@ async def register_player_callback(callback: CallbackQuery, db: Database, bot):
         await send_notification_to_all_users(bot, db, notification_message, exclude_user_id=user_id)
 
         # Вернуться в главное меню
-        text = (
-            "🎾 <b>Добро пожаловать в бот записи на падел!</b>\n\n"
-            "Что хотите сделать?"
-        )
+        text = "🎾 <b>Добро пожаловать в бот записи на падел!</b>\n\nЧто хотите сделать?"
         await callback.message.edit_text(text, reply_markup=create_main_keyboard(), parse_mode="HTML")
     else:
         await callback.answer("❌ Ошибка записи", show_alert=True)
+
 
 @router.callback_query(F.data.startswith("unregister_"))
 async def unregister_player_callback(callback: CallbackQuery, db: Database, bot):
@@ -401,27 +419,25 @@ async def unregister_player_callback(callback: CallbackQuery, db: Database, bot)
         await callback.answer(f"✅ Вы удалены из {date_formatted}", show_alert=True)
 
         # Отправить уведомление всем пользователям
-        notification_message = f"⚠️ <b>Игрок удалился</b>\n\n{user_name} удалился из игры <b>{date_formatted}</b>\n\n🔓 Освободилось место!"
+        notification_message = (
+            f"⚠️ <b>Игрок удалился</b>\n\n{user_name} удалился из игры <b>{date_formatted}</b>\n\n🔓 Освободилось место!"
+        )
         await send_notification_to_all_users(bot, db, notification_message, exclude_user_id=user_id)
 
         # Вернуться в главное меню
-        text = (
-            "🎾 <b>Добро пожаловать в бот записи на падел!</b>\n\n"
-            "Что хотите сделать?"
-        )
+        text = "🎾 <b>Добро пожаловать в бот записи на падел!</b>\n\nЧто хотите сделать?"
         await callback.message.edit_text(text, reply_markup=create_main_keyboard(), parse_mode="HTML")
     else:
         await callback.answer("❌ Ошибка удаления", show_alert=True)
 
+
 @router.callback_query(F.data == "back_to_main")
 async def back_to_main_callback(callback: CallbackQuery, bot):
     """Вернуться в главное меню"""
-    text = (
-        "🎾 <b>Добро пожаловать в бот записи на падел!</b>\n\n"
-        "Что хотите сделать?"
-    )
+    text = "🎾 <b>Добро пожаловать в бот записи на падел!</b>\n\nЧто хотите сделать?"
     await callback.message.edit_text(text, reply_markup=create_main_keyboard(), parse_mode="HTML")
     await callback.answer()
+
 
 @router.callback_query(F.data == "current_page")
 async def current_page_callback(callback: CallbackQuery, bot):

@@ -1,22 +1,22 @@
 import asyncio
 import logging
+from collections.abc import Awaitable, Callable
+from typing import Any
+
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
+from aiogram.dispatcher.middlewares.base import BaseMiddleware
 from aiogram.enums import ParseMode
 from aiogram.types import TelegramObject
-from aiogram.dispatcher.middlewares.base import BaseMiddleware
-from typing import Callable, Dict, Any, Awaitable
 
 from config import Config
 from database import Database
 from handlers import router
 
 # Настройка логирования
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
+
 
 class DatabaseMiddleware(BaseMiddleware):
     """Middleware для передачи объекта базы данных и бота в handlers"""
@@ -28,13 +28,14 @@ class DatabaseMiddleware(BaseMiddleware):
 
     async def __call__(
         self,
-        handler: Callable[[TelegramObject, Dict[str, Any]], Awaitable[Any]],
+        handler: Callable[[TelegramObject, dict[str, Any]], Awaitable[Any]],
         event: TelegramObject,
-        data: Dict[str, Any]
+        data: dict[str, Any],
     ) -> Any:
         data["db"] = self.db
         data["bot"] = self.bot
         return await handler(event, data)
+
 
 async def main():
     """Главная функция"""
@@ -46,10 +47,7 @@ async def main():
         return
 
     # Инициализация бота
-    bot = Bot(
-        token=config.bot_token,
-        default=DefaultBotProperties(parse_mode=ParseMode.HTML)
-    )
+    bot = Bot(token=config.bot_token, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 
     # Инициализация диспетчера
     dp = Dispatcher()
@@ -77,6 +75,7 @@ async def main():
     finally:
         await db.disconnect()
         await bot.session.close()
+
 
 if __name__ == "__main__":
     asyncio.run(main())
