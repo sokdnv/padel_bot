@@ -6,6 +6,7 @@ from aiogram.filters import Command
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 from database import Database
+from scheduler import schedule_reminder
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -95,7 +96,11 @@ def create_main_keyboard() -> InlineKeyboardMarkup:
 
 
 def create_pagination_keyboard(
-    action: str, page: int, total_pages: int, has_next: bool = False, has_prev: bool = False,
+    action: str,
+    page: int,
+    total_pages: int,
+    has_next: bool = False,
+    has_prev: bool = False,
 ) -> InlineKeyboardMarkup:
     """Создать клавиатуру с пагинацией"""
     keyboard = []
@@ -119,7 +124,10 @@ def create_pagination_keyboard(
 
 
 async def create_date_selection_keyboard(
-    db: Database, action: str, user_id: int = None, page: int = 0,
+    db: Database,
+    action: str,
+    user_id: int = None,
+    page: int = 0,
 ) -> InlineKeyboardMarkup:
     """Создать клавиатуру выбора даты с пагинацией"""
     GAMES_PER_PAGE = 4
@@ -181,7 +189,10 @@ async def create_date_selection_keyboard(
 async def start_command(message: Message, db: Database, bot):
     """Обработчик команды /start"""
     await db.save_user(
-        message.from_user.id, message.from_user.username, message.from_user.first_name, message.from_user.last_name,
+        message.from_user.id,
+        message.from_user.username,
+        message.from_user.first_name,
+        message.from_user.last_name,
     )
 
     text = "🎾 <b>Добро пожаловать в бот записи на падел!</b>\n\nЧто хотите сделать?"
@@ -379,6 +390,10 @@ async def register_player_callback(callback: CallbackQuery, db: Database, bot):
 
         await callback.answer(f"✅ Вы записаны на {date_formatted}", show_alert=True)
 
+        updated_game = await db.get_game_by_date(date)
+        if updated_game and updated_game.time:
+            await schedule_reminder(date.date(), updated_game.time)
+
         # Отправить уведомление всем пользователям
         notification_message = f"🎾 <b>Новая запись на игру!</b>\n\n{user_name} записался на <b>{date_formatted}</b>"
         await send_notification_to_all_users(bot, db, notification_message, exclude_user_id=user_id)
@@ -417,6 +432,10 @@ async def unregister_player_callback(callback: CallbackQuery, db: Database, bot)
         user_name = get_user_display_name(callback.from_user)
 
         await callback.answer(f"✅ Вы удалены из {date_formatted}", show_alert=True)
+
+        updated_game = await db.get_game_by_date(date)
+        if updated_game and updated_game.time and len(updated_game.get_players()) > 0:
+            await schedule_reminder(date.date(), updated_game.time)
 
         # Отправить уведомление всем пользователям
         notification_message = (

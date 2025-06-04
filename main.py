@@ -12,6 +12,7 @@ from aiogram.types import TelegramObject
 from config import Config
 from database import Database
 from handlers import router
+from scheduler import init_reminder_system
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
@@ -57,6 +58,8 @@ async def main():
 
     try:
         await db.connect()
+
+        init_reminder_system(bot, db)
 
         # Добавление middleware для базы данных и бота
         middleware = DatabaseMiddleware(db, bot)

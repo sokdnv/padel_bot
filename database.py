@@ -108,7 +108,10 @@ class Database:
         ]
 
     async def get_available_games(
-        self, limit: int = 20, offset: int = 0, exclude_user_id: int = None,
+        self,
+        limit: int = 20,
+        offset: int = 0,
+        exclude_user_id: int = None,
     ) -> list[GameSlot]:
         """Получить игры со свободными местами"""
         if exclude_user_id:
@@ -182,7 +185,8 @@ class Database:
         async with self.pool.acquire() as conn:
             # Получить текущее состояние игры
             game = await conn.fetchrow(
-                "SELECT player_1, player_2, player_3, player_4 FROM games WHERE date = $1", date.date(),
+                "SELECT player_1, player_2, player_3, player_4 FROM games WHERE date = $1",
+                date.date(),
             )
 
             if not game:
@@ -206,7 +210,8 @@ class Database:
         """Отписать игрока от игры"""
         async with self.pool.acquire() as conn:
             game = await conn.fetchrow(
-                "SELECT player_1, player_2, player_3, player_4 FROM games WHERE date = $1", date.date(),
+                "SELECT player_1, player_2, player_3, player_4 FROM games WHERE date = $1",
+                date.date(),
             )
 
             if not game:
@@ -329,3 +334,38 @@ class Database:
                 """
         async with self.pool.acquire() as conn:
             return await conn.fetchval(query, user_id)
+
+    async def get_upcoming_games_with_time(self, limit: int = 100, offset: int = 0) -> List[GameSlot]:
+        """Получить предстоящие игры с указанным временем"""
+        query = """
+                SELECT date, \
+                       player_1, \
+                       player_2, \
+                       player_3, \
+                       player_4, \
+                       time, \
+                       duration, \
+                       location
+                FROM games
+                WHERE date >= CURRENT_DATE
+                  AND time IS NOT NULL
+                ORDER BY date, time
+                LIMIT $1 OFFSET $2
+                """
+
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(query, limit, offset)
+
+        return [
+            GameSlot(
+                date=datetime.combine(row["date"], datetime.min.time()),
+                player_1=row["player_1"],
+                player_2=row["player_2"],
+                player_3=row["player_3"],
+                player_4=row["player_4"],
+                time=row["time"],
+                duration=row["duration"],
+                location=row["location"],
+            )
+            for row in rows
+        ]
