@@ -110,10 +110,9 @@ async def send_game_reminder(game_date):
         message = (
             f"⏰ <b>Напоминание об игре!</b>\n\n"
             f"🎾 Игра через 3 часа\n"
-            f"📅 Дата: {date_str}\n"
-            f"🕐 Время: {time_str}\n"
-            f"📍 Место: {location_str}\n\n"
-            f"👥 Участники: {', '.join(player_names)}\n\n"
+            f"🕐 {time_str}\n"
+            f"📍 {location_str}\n\n"
+            f"👥 {', '.join(player_names)}\n\n"
             f"До встречи на корте! 🎾"
         )
 
