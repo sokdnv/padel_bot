@@ -157,10 +157,10 @@ class Database:
         query = """
                 SELECT date, player_1, player_2, player_3, player_4, time, duration, location
                 FROM games
-                WHERE date >= CURRENT_DATE
+                WHERE date >= CURRENT_DATE - INTERVAL '1 day'
                   AND (player_1 = $1 OR player_2 = $1 OR player_3 = $1 OR player_4 = $1)
                 ORDER BY date
-                LIMIT $2 OFFSET $3 \
+                LIMIT $2 OFFSET $3
                 """
 
         async with self.pool.acquire() as conn:
@@ -300,8 +300,8 @@ class Database:
         """Подсчитать количество игр пользователя"""
         query = """
                 SELECT COUNT(*) FROM games
-                WHERE date >= CURRENT_DATE
-                  AND (player_1 = $1 OR player_2 = $1 OR player_3 = $1 OR player_4 = $1) \
+                WHERE date >= CURRENT_DATE - INTERVAL '1 day'
+                  AND (player_1 = $1 OR player_2 = $1 OR player_3 = $1 OR player_4 = $1)
                 """
         async with self.pool.acquire() as conn:
             return await conn.fetchval(query, user_id)
