@@ -20,6 +20,7 @@ class GameSlot:
     player_2: int | None = None
     player_3: int | None = None
     player_4: int | None = None
+    court: int | None = None  # Добавить это поле
 
     def get_players(self) -> list[int]:
         """Получить список зарегистрированных игроков"""
@@ -83,7 +84,7 @@ class Database:
     async def get_upcoming_games(self, limit: int = 20, offset: int = 0) -> list[GameSlot]:
         """Получить предстоящие игры с пагинацией"""
         query = """
-                SELECT date, player_1, player_2, player_3, player_4, time, duration, location
+                SELECT date, player_1, player_2, player_3, player_4, time, duration, location, court
                 FROM games
                 WHERE date >= CURRENT_DATE
                 ORDER BY date
@@ -103,24 +104,26 @@ class Database:
                 time=row["time"].strftime("%H:%M") if row["time"] else None,
                 duration=row["duration"],
                 location=row["location"],
+                court=row["court"],
             )
             for row in rows
         ]
 
     async def get_available_games(
-        self,
-        limit: int = 20,
-        offset: int = 0,
-        exclude_user_id: int = None,
+            self,
+            limit: int = 20,
+            offset: int = 0,
+            exclude_user_id: int = None,
     ) -> list[GameSlot]:
         """Получить игры со свободными местами"""
         if exclude_user_id:
             query = """
-                    SELECT date, player_1, player_2, player_3, player_4, time, duration, location
+                    SELECT date, player_1, player_2, player_3, player_4, time, duration, location, court
                     FROM games
                     WHERE date >= CURRENT_DATE
                       AND (player_1 IS NULL OR player_2 IS NULL OR player_3 IS NULL OR player_4 IS NULL)
                       AND NOT (player_1 = $3 OR player_2 = $3 OR player_3 = $3 OR player_4 = $3)
+                      AND (time IS NULL OR (date > CURRENT_DATE OR (date = CURRENT_DATE AND time > CURRENT_TIME)))
                     ORDER BY date
                     LIMIT $1 OFFSET $2
                     """
@@ -128,10 +131,11 @@ class Database:
                 rows = await conn.fetch(query, limit, offset, exclude_user_id)
         else:
             query = """
-                    SELECT date, player_1, player_2, player_3, player_4, time, duration, location
+                    SELECT date, player_1, player_2, player_3, player_4, time, duration, location, court
                     FROM games
                     WHERE date >= CURRENT_DATE
                       AND (player_1 IS NULL OR player_2 IS NULL OR player_3 IS NULL OR player_4 IS NULL)
+                      AND (time IS NULL OR (date > CURRENT_DATE OR (date = CURRENT_DATE AND time > CURRENT_TIME)))
                     ORDER BY date
                     LIMIT $1 OFFSET $2
                     """
@@ -148,17 +152,19 @@ class Database:
                 time=row["time"].strftime("%H:%M") if row["time"] else None,
                 duration=row["duration"],
                 location=row["location"],
+                court=row["court"],
             )
             for row in rows
         ]
 
     async def get_user_games(self, user_id: int, limit: int = 20, offset: int = 0) -> list[GameSlot]:
-        """Получить игры пользователя"""
+        """Получить игры пользователя (только те, которые еще не начались для удаления)"""
         query = """
-                SELECT date, player_1, player_2, player_3, player_4, time, duration, location
+                SELECT date, player_1, player_2, player_3, player_4, time, duration, location, court
                 FROM games
                 WHERE date >= CURRENT_DATE - INTERVAL '1 day'
                   AND (player_1 = $1 OR player_2 = $1 OR player_3 = $1 OR player_4 = $1)
+                  AND (time IS NULL OR (date > CURRENT_DATE OR (date = CURRENT_DATE AND time > CURRENT_TIME)))
                 ORDER BY date
                 LIMIT $2 OFFSET $3
                 """
@@ -176,6 +182,7 @@ class Database:
                 time=row["time"].strftime("%H:%M") if row["time"] else None,
                 duration=row["duration"],
                 location=row["location"],
+                court=row["court"],
             )
             for row in rows
         ]
@@ -231,7 +238,7 @@ class Database:
         """Получить игру по дате"""
         async with self.pool.acquire() as conn:
             row = await conn.fetchrow(
-                "SELECT date, player_1, player_2, player_3, player_4, time, duration, location FROM games WHERE date = $1",
+                "SELECT date, player_1, player_2, player_3, player_4, time, duration, location, court FROM games WHERE date = $1",
                 date.date(),
             )
 
@@ -247,6 +254,7 @@ class Database:
             time=row["time"].strftime("%H:%M") if row["time"] else None,
             duration=row["duration"],
             location=row["location"],
+            court=row["court"],
         )
 
     async def get_users_info(self, user_ids: list[int]) -> dict:
@@ -291,17 +299,19 @@ class Database:
         query = """
                 SELECT COUNT(*) FROM games
                 WHERE date >= CURRENT_DATE
-                  AND (player_1 IS NULL OR player_2 IS NULL OR player_3 IS NULL OR player_4 IS NULL) \
+                  AND (player_1 IS NULL OR player_2 IS NULL OR player_3 IS NULL OR player_4 IS NULL)
+                  AND (time IS NULL OR (date > CURRENT_DATE OR (date = CURRENT_DATE AND time > CURRENT_TIME)))
                 """
         async with self.pool.acquire() as conn:
             return await conn.fetchval(query)
 
     async def count_user_games(self, user_id: int) -> int:
-        """Подсчитать количество игр пользователя"""
+        """Подсчитать количество игр пользователя (только те, которые еще не начались)"""
         query = """
                 SELECT COUNT(*) FROM games
                 WHERE date >= CURRENT_DATE - INTERVAL '1 day'
                   AND (player_1 = $1 OR player_2 = $1 OR player_3 = $1 OR player_4 = $1)
+                  AND (time IS NULL OR (date > CURRENT_DATE OR (date = CURRENT_DATE AND time > CURRENT_TIME)))
                 """
         async with self.pool.acquire() as conn:
             return await conn.fetchval(query, user_id)
@@ -331,6 +341,7 @@ class Database:
                 WHERE date >= CURRENT_DATE
                   AND (player_1 IS NULL OR player_2 IS NULL OR player_3 IS NULL OR player_4 IS NULL)
                   AND NOT (player_1 = $1 OR player_2 = $1 OR player_3 = $1 OR player_4 = $1)
+                  AND (time IS NULL OR (date > CURRENT_DATE OR (date = CURRENT_DATE AND time > CURRENT_TIME)))
                 """
         async with self.pool.acquire() as conn:
             return await conn.fetchval(query, user_id)
@@ -345,7 +356,8 @@ class Database:
                        player_4, \
                        time, \
                        duration, \
-                       location
+                       location, \
+                       court
                 FROM games
                 WHERE date >= CURRENT_DATE
                   AND time IS NOT NULL
@@ -366,6 +378,7 @@ class Database:
                 time=row["time"],
                 duration=row["duration"],
                 location=row["location"],
+                court=row["court"],
             )
             for row in rows
         ]

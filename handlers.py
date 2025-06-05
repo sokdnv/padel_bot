@@ -66,7 +66,7 @@ async def format_games_list(db: Database, games: list, users_info: dict = None) 
             text += f"{time_info}\n"
         if game.location:
             text += f"📍 {game.location}\n"
-        text += f"📊 Занято: {players_count}/4\n"
+        text += f"🎾 Корт №{game.court if game.court else 'не указан'}\n"
         if players_count > 0 and users_info:
             text += "👥 Записаны: "
             player_names = []
