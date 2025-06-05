@@ -124,10 +124,10 @@ def create_pagination_keyboard(
 
 
 async def create_date_selection_keyboard(
-    db: Database,
-    action: str,
-    user_id: int = None,
-    page: int = 0,
+        db: Database,
+        action: str,
+        user_id: int = None,
+        page: int = 0,
 ) -> InlineKeyboardMarkup:
     """Создать клавиатуру выбора даты с пагинацией"""
     GAMES_PER_PAGE = 4
@@ -152,15 +152,20 @@ async def create_date_selection_keyboard(
     for game in games:
         date_str = game.date.strftime("%d.%m")
 
+        # Формируем текст кнопки с временем
+        if game.time:
+            button_text = f"{date_str} в {game.time}"
+        else:
+            button_text = f"{date_str} (время не указано)"
+
         if action == "register":
             free_slots = game.free_slots()
-            text = f"{date_str} (свободно: {free_slots})"
+            button_text += f" (свободно: {free_slots})"
             callback_data = f"register_{game.date.strftime('%Y-%m-%d')}"
         else:  # unregister
-            text = f"{date_str}"
             callback_data = f"unregister_{game.date.strftime('%Y-%m-%d')}"
 
-        keyboard.append([InlineKeyboardButton(text=text, callback_data=callback_data)])
+        keyboard.append([InlineKeyboardButton(text=button_text, callback_data=callback_data)])
 
     # Добавляем навигацию
     total_pages = (total_count + GAMES_PER_PAGE - 1) // GAMES_PER_PAGE

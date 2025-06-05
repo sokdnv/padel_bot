@@ -116,33 +116,23 @@ class Database:
             exclude_user_id: int = None,
     ) -> list[GameSlot]:
         """Получить игры со свободными местами"""
-        if exclude_user_id:
-            query = """
-                    SELECT date, player_1, player_2, player_3, player_4, time, duration, location, court
-                    FROM games
-                    WHERE date >= CURRENT_DATE
-                      AND (player_1 IS NULL OR player_2 IS NULL OR player_3 IS NULL OR player_4 IS NULL)
-                      AND NOT (player_1 = $3 OR player_2 = $3 OR player_3 = $3 OR player_4 = $3)
-                      AND (time IS NULL OR (date > CURRENT_DATE OR (date = CURRENT_DATE AND time > CURRENT_TIME)))
-                    ORDER BY date
-                    LIMIT $1 OFFSET $2
-                    """
-            async with self.pool.acquire() as conn:
-                rows = await conn.fetch(query, limit, offset, exclude_user_id)
-        else:
-            query = """
-                    SELECT date, player_1, player_2, player_3, player_4, time, duration, location, court
-                    FROM games
-                    WHERE date >= CURRENT_DATE
-                      AND (player_1 IS NULL OR player_2 IS NULL OR player_3 IS NULL OR player_4 IS NULL)
-                      AND (time IS NULL OR (date > CURRENT_DATE OR (date = CURRENT_DATE AND time > CURRENT_TIME)))
-                    ORDER BY date
-                    LIMIT $1 OFFSET $2
-                    """
-            async with self.pool.acquire() as conn:
-                rows = await conn.fetch(query, limit, offset)
+        # Увеличиваем лимит для компенсации фильтрации
+        fetch_limit = limit * 2 if exclude_user_id else limit
 
-        return [
+        query = """
+                SELECT date, player_1, player_2, player_3, player_4, time, duration, location, court
+                FROM games
+                WHERE date >= CURRENT_DATE
+                  AND (player_1 IS NULL OR player_2 IS NULL OR player_3 IS NULL OR player_4 IS NULL)
+                  AND (time IS NULL OR (date > CURRENT_DATE OR (date = CURRENT_DATE AND time > CURRENT_TIME)))
+                ORDER BY date
+                LIMIT $1 OFFSET $2 \
+                """
+
+        async with self.pool.acquire() as conn:
+            rows = await conn.fetch(query, fetch_limit, offset)
+
+        all_games = [
             GameSlot(
                 date=datetime.combine(row["date"], datetime.min.time()),
                 player_1=row["player_1"],
@@ -156,6 +146,12 @@ class Database:
             )
             for row in rows
         ]
+
+        if exclude_user_id:
+            filtered_games = [game for game in all_games if not game.has_player(exclude_user_id)]
+            return filtered_games[:limit]
+        else:
+            return all_games
 
     async def get_user_games(self, user_id: int, limit: int = 20, offset: int = 0) -> list[GameSlot]:
         """Получить игры пользователя (только те, которые еще не начались для удаления)"""
@@ -337,14 +333,33 @@ class Database:
     async def count_available_games_excluding_user(self, user_id: int) -> int:
         """Подсчитать количество игр со свободными местами, исключая игры пользователя"""
         query = """
-                SELECT COUNT(*) FROM games
+                SELECT date, player_1, player_2, player_3, player_4, time, duration, location, court
+                FROM games
                 WHERE date >= CURRENT_DATE
                   AND (player_1 IS NULL OR player_2 IS NULL OR player_3 IS NULL OR player_4 IS NULL)
-                  AND NOT (player_1 = $1 OR player_2 = $1 OR player_3 = $1 OR player_4 = $1)
                   AND (time IS NULL OR (date > CURRENT_DATE OR (date = CURRENT_DATE AND time > CURRENT_TIME)))
                 """
         async with self.pool.acquire() as conn:
-            return await conn.fetchval(query, user_id)
+            rows = await conn.fetch(query)
+
+        # Создаем объекты GameSlot и фильтруем
+        games = [
+            GameSlot(
+                date=datetime.combine(row["date"], datetime.min.time()),
+                player_1=row["player_1"],
+                player_2=row["player_2"],
+                player_3=row["player_3"],
+                player_4=row["player_4"],
+                time=row["time"].strftime("%H:%M") if row["time"] else None,
+                duration=row["duration"],
+                location=row["location"],
+                court=row["court"],
+            )
+            for row in rows
+        ]
+
+        filtered_games = [game for game in games if not game.has_player(user_id)]
+        return len(filtered_games)
 
     async def get_upcoming_games_with_time(self, limit: int = 100, offset: int = 0) -> list[GameSlot]:
         """Получить предстоящие игры с указанным временем"""
