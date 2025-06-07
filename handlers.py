@@ -87,9 +87,10 @@ def create_main_keyboard() -> InlineKeyboardMarkup:
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
             [InlineKeyboardButton(text="🟢 Свободные игры", callback_data="show_available_games_0")],
-            [InlineKeyboardButton(text="👤 Мои игры", callback_data="show_my_games_0")],
+            [InlineKeyboardButton(text="👤 Мои записи", callback_data="show_my_games_0")],
             [InlineKeyboardButton(text="📝 Записаться", callback_data="register_menu_0")],
-            [InlineKeyboardButton(text="❌ Удалиться из игры", callback_data="unregister_menu_0")],
+            [InlineKeyboardButton(text="❌ Удалиться", callback_data="unregister_menu_0")],
+            [InlineKeyboardButton(text="🎮 Управление моими играми", callback_data="game_management")],
         ],
     )
     return keyboard
@@ -124,10 +125,10 @@ def create_pagination_keyboard(
 
 
 async def create_date_selection_keyboard(
-        db: Database,
-        action: str,
-        user_id: int = None,
-        page: int = 0,
+    db: Database,
+    action: str,
+    user_id: int = None,
+    page: int = 0,
 ) -> InlineKeyboardMarkup:
     """Создать клавиатуру выбора даты с пагинацией"""
     GAMES_PER_PAGE = 4

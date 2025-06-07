@@ -11,6 +11,7 @@ from aiogram.types import TelegramObject
 
 from config import Config
 from database import Database
+from game_creation import router as game_creation_router
 from handlers import router
 from scheduler import init_reminder_system
 
@@ -68,6 +69,7 @@ async def main():
 
         # Регистрация роутеров
         dp.include_router(router)
+        dp.include_router(game_creation_router)
 
         # Запуск бота
         logger.info("Бот запускается...")
