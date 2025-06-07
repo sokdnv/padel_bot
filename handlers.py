@@ -90,7 +90,7 @@ def create_main_keyboard() -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text="👤 Мои записи", callback_data="show_my_games_0")],
             [InlineKeyboardButton(text="📝 Записаться", callback_data="register_menu_0")],
             [InlineKeyboardButton(text="❌ Удалиться", callback_data="unregister_menu_0")],
-            [InlineKeyboardButton(text="🎮 Управление моими играми", callback_data="game_management")],
+            [InlineKeyboardButton(text="🎮 Управление играми", callback_data="game_management")],
         ],
     )
     return keyboard
