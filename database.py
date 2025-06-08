@@ -284,12 +284,6 @@ class Database:
 
         return users_info
 
-    async def count_upcoming_games(self) -> int:
-        """Подсчитать общее количество предстоящих игр"""
-        query = "SELECT COUNT(*) FROM games WHERE date >= CURRENT_DATE"
-        async with self.pool.acquire() as conn:
-            return await conn.fetchval(query)
-
     async def count_available_games(self) -> int:
         """Подсчитать количество игр со свободными местами"""
         query = """

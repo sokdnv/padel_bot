@@ -86,7 +86,7 @@ def create_main_keyboard() -> InlineKeyboardMarkup:
     """Создать главную клавиатуру"""
     keyboard = InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="🟢 Свободные игры", callback_data="show_available_games_0")],
+            [InlineKeyboardButton(text="🟢 Все игры", callback_data="show_available_games_0")],
             [InlineKeyboardButton(text="👤 Мои записи", callback_data="show_my_games_0")],
             [InlineKeyboardButton(text="📝 Записаться", callback_data="register_menu_0")],
             [InlineKeyboardButton(text="❌ Удалиться", callback_data="unregister_menu_0")],
@@ -217,12 +217,12 @@ async def show_available_games(message_or_callback, db: Database, page: int = 0,
     GAMES_PER_PAGE = 4
     offset = page * GAMES_PER_PAGE
 
-    games = await db.get_available_games(limit=GAMES_PER_PAGE, offset=offset)
+    games = await db.get_upcoming_games(limit=GAMES_PER_PAGE, offset=offset)
     total_count = await db.count_available_games()
     total_pages = (total_count + GAMES_PER_PAGE - 1) // GAMES_PER_PAGE
 
     if not games:
-        text = "🚫 Нет свободных игр"
+        text = "🚫 Нет созданных игр"
     else:
         # Получаем информацию о пользователях
         all_player_ids = []
@@ -231,7 +231,7 @@ async def show_available_games(message_or_callback, db: Database, page: int = 0,
 
         users_info = await db.get_users_info(list(set(all_player_ids))) if all_player_ids else {}
 
-        text = "🟢 <b>Свободные игры</b>\n\n" + await format_games_list(db, games, users_info)
+        text = "🟢 <b>Все игры</b>\n\n" + await format_games_list(db, games, users_info)
 
     # Создаем клавиатуру
     keyboard = []
@@ -310,8 +310,8 @@ async def show_my_games(message_or_callback, db: Database, user_id: int, page: i
     # Кнопки действий
     keyboard.append(
         [
-            InlineKeyboardButton(text="❌ Удалиться из игры", callback_data="unregister_menu_0"),
-            InlineKeyboardButton(text="🟢 Свободные игры", callback_data="show_available_games_0"),
+            InlineKeyboardButton(text="❌ Удалиться", callback_data="unregister_menu_0"),
+            InlineKeyboardButton(text="🟢 Все игры", callback_data="show_available_games_0"),
         ],
     )
 
