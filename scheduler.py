@@ -99,19 +99,21 @@ async def send_game_reminder(game_date):
         # Форматируем время из БД
         if game.time:
             if isinstance(game.time, str):
-                time_str = game.time[:5]  # Обрезаем секунды 15:00:00 -> 15:00
+                time_str = game.time[:5]
             else:
                 time_str = game.time.strftime("%H:%M")
         else:
             time_str = "время не указано"
 
         location_str = game.location if game.location else "место не указано"
+        court_str = f"Корт №{game.court}" if game.court else "номер корта не указан"
 
         message = (
             f"⏰ <b>Напоминание об игре!</b>\n\n"
             f"🎾 Игра через 3 часа\n"
             f"🕐 {time_str}\n"
-            f"📍 {location_str}\n\n"
+            f"📍 {location_str}\n"
+            f"🏟️ {court_str}\n\n"
             f"👥 {', '.join(player_names)}\n\n"
             f"До встречи на корте! 🎾"
         )
