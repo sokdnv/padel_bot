@@ -229,24 +229,29 @@ class NotificationService:
         """Отправить уведомление всем пользователям."""
         stats = {"sent": 0, "failed": 0}
 
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🗑 Удалить уведомление", callback_data="delete_message")],
+        ])
+
         try:
             all_users = await db.get_all_users()
             for user_id in all_users:
                 if exclude_user_id and user_id == exclude_user_id:
                     continue
-
                 try:
-                    await bot.send_message(user_id, message, parse_mode="HTML")
+                    await bot.send_message(
+                        user_id,
+                        message,
+                        parse_mode="HTML",
+                        reply_markup=keyboard,
+                    )
                     stats["sent"] += 1
                 except Exception as e:  # noqa: BLE001
                     logger.warning(f"Не удалось отправить уведомление пользователю {user_id}: {e}")
                     stats["failed"] += 1
-
             logger.info(f"Уведомления отправлены: {stats['sent']} успешно, {stats['failed']} неудачно")
-
         except Exception as e:  # noqa: BLE001
             logger.error(f"Ошибка при отправке уведомлений: {e}")
-
         return stats
 
 

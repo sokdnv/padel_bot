@@ -7,7 +7,7 @@ from aiogram.filters import Command
 from aiogram.types import CallbackQuery, Message
 
 from src.database.db import Database
-from src.services.core import BotConfig, GameListHandler, GameService, KeyboardBuilder
+from src.services.core import BotConfig, GameListHandler, GameService, KeyboardBuilder, NotificationService
 
 router = Router()
 
@@ -148,3 +148,35 @@ async def back_to_main_callback(callback: CallbackQuery) -> None:
 async def current_page_callback(callback: CallbackQuery) -> None:
     """Заглушка для кнопки текущей страницы."""
     await callback.answer()
+
+
+@router.callback_query(F.data == "delete_message")
+async def delete_message_handler(callback: CallbackQuery) -> None:
+    """Обработчик удаления сообщения."""
+    try:
+        await callback.message.delete()
+        await callback.answer("Сообщение удалено", show_alert=False)
+    except Exception:  # noqa: S110
+        pass
+
+
+@router.message(F.text == "1")
+async def handle_broadcast_test(message: Message, bot: Bot, db: Database):
+    """Обработчик сообщения '1' - отправляет 'test' всем пользователям."""
+    try:
+        # Отправляем "test" всем пользователям, исключая отправителя
+        stats = await NotificationService.send_to_all_users(
+            bot=bot,
+            db=db,
+            message="test",
+        )
+
+        # Отправляем статистику отправителю
+        await message.reply(
+            f"✅ Рассылка завершена!\n"
+            f"📤 Отправлено: {stats['sent']}\n"
+            f"❌ Неудачно: {stats['failed']}"
+        )
+
+    except Exception as e:
+        await message.reply("❌ Ошибка при отправке рассылки")
