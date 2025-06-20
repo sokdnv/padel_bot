@@ -21,4 +21,4 @@ COPY . .
 
 ENV PYTHONPATH=/app
 
-CMD ["uv", "run", "main.py"]
+CMD ["uv", "run", "-m", "src.main"]
