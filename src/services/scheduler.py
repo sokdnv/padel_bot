@@ -1,11 +1,12 @@
 """Скрипт для отправки напоминаний игрокам."""
 
 import asyncio
-import logging
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone
 
-logger = logging.getLogger(__name__)
+from src.config import logger
+from src.keyboards import delete_keyboard
+from src.services.payments import send_payment_offer
 
 
 @dataclass
@@ -82,12 +83,13 @@ class MessageFormatter:
 
 
 class ReminderTask:
-    """Управление отдельной задачей напоминания."""
+    """Управление задачами напоминания и предложения оплаты."""
 
     def __init__(self, game_date: date, game_time: str | time) -> None:  # noqa: D107
         self.game_date = game_date
         self.game_time = game_time
-        self.task: asyncio.Task | None = None
+        self.reminder_task: asyncio.Task | None = None
+        self.payment_task: asyncio.Task | None = None
         self.key = self._generate_key()
 
     def _generate_key(self) -> str:
@@ -96,13 +98,17 @@ class ReminderTask:
         return f"{self.game_date}_{time_str}"
 
     def cancel(self) -> None:
-        """Отмена задачи."""
-        if self.task and not self.task.done():
-            self.task.cancel()
+        """Отмена всех задач."""
+        for task in [self.reminder_task, self.payment_task]:
+            if task and not task.done():
+                task.cancel()
 
     def is_active(self) -> bool:
-        """Проверка активности задачи."""
-        return self.task is not None and not self.task.done()
+        """Проверка активности любой задачи."""
+        return any(
+            task is not None and not task.done()
+            for task in [self.reminder_task, self.payment_task]
+        )
 
 
 class ReminderSystem:
@@ -112,7 +118,7 @@ class ReminderSystem:
         self.bot = bot
         self.database = database
         self.config = config or ReminderConfig()
-        self.reminder_tasks: dict[str, ReminderTask] = {}
+        self.tasks: dict[str, ReminderTask] = {}
 
     async def schedule_reminder(self, game_date: date, game_time: str | time) -> bool:
         """Запланировать напоминание для игры."""
@@ -122,40 +128,66 @@ class ReminderSystem:
                 logger.warning(f"Не удалось разобрать время игры: {game_time}")
                 return False
 
-            # Создаем datetime в нужном часовом поясе
             game_datetime = datetime.combine(game_date, parsed_time, tzinfo=self.config.timezone)
             reminder_time = game_datetime - timedelta(hours=self.config.reminder_hours_before)
-
-            # Проверяем, что время в будущем
             now = datetime.now(self.config.timezone)
+
             if reminder_time <= now:
                 logger.debug(f"Время напоминания уже прошло для игры {game_date} {game_time}")
                 return False
 
-            # Создаем задачу напоминания
-            reminder_task = ReminderTask(game_date, game_time)
-
-            # Отменяем старую задачу если есть
-            old_task = self.reminder_tasks.get(reminder_task.key)
+            task = ReminderTask(game_date, game_time)
+            old_task = self.tasks.get(task.key)
             if old_task:
                 old_task.cancel()
 
-            # Создаем новую задачу
             delay = (reminder_time - now).total_seconds()
-            reminder_task.task = asyncio.create_task(
+            task.reminder_task = asyncio.create_task(
                 self._send_reminder_after_delay(delay, game_date),
             )
 
-            self.reminder_tasks[reminder_task.key] = reminder_task
+            self.tasks[task.key] = task
 
-            logger.info(
-                f"Запланировано напоминание для {game_date} {TimeFormatter.format_time(game_time)} "
-                f"(через {delay / 3600:.1f} часов)",
-            )
             return True  # noqa: TRY300
 
-        except Exception:
+        except Exception:  # noqa: BLE001
             logger.exception("Ошибка планирования напоминания")
+            return False
+
+    async def schedule_payment_offer(self, game_date: date, game_time: str | time, duration: int = 120) -> bool:
+        """Запланировать предложение оплаты после игры."""
+        try:
+            parsed_time = TimeFormatter.parse_time(game_time)
+            if not parsed_time:
+                logger.warning(f"Не удалось разобрать время игры для оплаты: {game_time}")
+                return False
+
+            game_datetime = datetime.combine(game_date, parsed_time, tzinfo=self.config.timezone)
+            payment_time = game_datetime + timedelta(minutes=duration)
+            now = datetime.now(self.config.timezone)
+
+            if payment_time <= now:
+                logger.debug(f"Время предложения оплаты уже прошло для игры {game_date} {game_time}")
+                return False
+
+            task_key = f"{game_date}_{TimeFormatter.format_time(game_time)}"
+            task = self.tasks.get(task_key)
+            if not task:
+                task = ReminderTask(game_date, game_time)
+                self.tasks[task_key] = task
+
+            if task.payment_task:
+                task.payment_task.cancel()
+
+            delay = (payment_time - now).total_seconds()
+            task.payment_task = asyncio.create_task(
+                self._send_payment_offer_after_delay(delay, game_date, game_time),
+            )
+
+            return True  # noqa: TRY300
+
+        except Exception:  # noqa: BLE001
+            logger.exception("Ошибка планирования предложения оплаты")
             return False
 
     async def _send_reminder_after_delay(self, delay: float, game_date: date) -> None:
@@ -165,13 +197,22 @@ class ReminderSystem:
             await self._send_game_reminder(game_date)
         except asyncio.CancelledError:
             logger.debug(f"Напоминание для {game_date} отменено")
-        except Exception:
+        except Exception:  # noqa: BLE001
             logger.exception("Ошибка отправки напоминания")
+
+    async def _send_payment_offer_after_delay(self, delay: float, game_date: date, game_time: str | time) -> None:
+        """Отправить предложение оплаты после задержки."""
+        try:
+            await asyncio.sleep(delay)
+            await self._send_payment_offer(game_date, game_time)
+        except asyncio.CancelledError:
+            logger.debug(f"Предложение оплаты для {game_date} отменено")
+        except Exception:  # noqa: BLE001
+            logger.exception("Ошибка отправки предложения оплаты")
 
     async def _send_game_reminder(self, game_date: date) -> None:
         """Отправить напоминания участникам."""
         try:
-            # Получаем актуальную игру
             game_datetime = datetime.combine(game_date, datetime.min.time())
             game = await self.database.get_game_by_date(game_datetime)
 
@@ -179,17 +220,13 @@ class ReminderSystem:
                 logger.debug(f"Игра {game_date} не найдена или без участников")
                 return
 
-            # Получаем информацию об игроках
             players = game.get_players()
             users_info = await self.database.get_users_info(players)
-
-            # Формируем список имен участников
             player_names = [
                 users_info.get(player_id, f"User{player_id}")
                 for player_id in players
             ]
 
-            # Формируем сообщение
             message = MessageFormatter.format_reminder_message(
                 game_time=game.time,
                 location=game.location,
@@ -198,11 +235,10 @@ class ReminderSystem:
                 hours_before=self.config.reminder_hours_before,
             )
 
-            # Отправляем всем участникам
             success_count = 0
             for player_id in players:
                 try:
-                    await self.bot.send_message(player_id, message, parse_mode="HTML")
+                    await self.bot.send_message(player_id, message, parse_mode="HTML", reply_markup=delete_keyboard)
                     success_count += 1
                 except Exception as e:  # noqa: BLE001
                     logger.warning(f"Не удалось отправить напоминание игроку {player_id}: {e}")
@@ -212,38 +248,67 @@ class ReminderSystem:
                 f"{TimeFormatter.format_time(game.time)} ({success_count}/{len(players)} успешно)",
             )
 
-        except Exception:
+        except Exception:  # noqa: BLE001
             logger.exception("Ошибка отправки напоминаний")
 
+    async def _send_payment_offer(self, game_date: date, game_time: str | time) -> None:
+        """Отправить предложение оплаты админу игры."""
+        try:
+            game_datetime = datetime.combine(game_date, datetime.min.time())
+            game = await self.database.get_game_by_date(game_datetime)
+
+            if not game or not game.admin:
+                logger.debug(f"Игра {game_date} не найдена или без админа")
+                return
+
+            await send_payment_offer(
+                bot=self.bot,
+                admin_id=game.admin,
+                game_date=TimeFormatter.format_date(game_date),
+                game_time=TimeFormatter.format_time(game_time)
+            )
+
+            logger.info(
+                f"Отправлено предложение оплаты админу {game.admin} "
+                f"для игры {TimeFormatter.format_date(game_date)} {TimeFormatter.format_time(game_time)}",
+            )
+
+        except Exception:  # noqa: BLE001
+            logger.exception("Ошибка отправки предложения оплаты")
+
     async def schedule_all_upcoming_games(self) -> None:
-        """Запланировать напоминания для всех предстоящих игр."""
+        """Запланировать напоминания и предложения оплаты для всех предстоящих игр."""
         try:
             games = await self.database.get_upcoming_games_with_time(
                 limit=self.config.max_upcoming_games,
             )
 
-            scheduled_count = 0
+            reminder_count = 0
+            payment_count = 0
+
             for game in games:
-                if game.time and game.get_players():
-                    success = await self.schedule_reminder(game.date.date(), game.time)
-                    if success:
-                        scheduled_count += 1
+                if game.time:
+                    if game.get_players():  # noqa: SIM102
+                        if await self.schedule_reminder(game.date.date(), game.time):
+                            reminder_count += 1
 
-            logger.info(f"Запланировано {scheduled_count} напоминаний из {len(games)} игр")
+                    if game.admin:  # noqa: SIM102
+                        if await self.schedule_payment_offer(game.date.date(), game.time, game.duration):
+                            payment_count += 1
 
-        except Exception:
+            logger.info(
+                f"Запланировано {reminder_count} напоминаний и "
+                f"{payment_count} предложений оплаты из {len(games)} игр",
+            )
+
+        except Exception:  # noqa: BLE001
             logger.exception("Ошибка при планировании напоминаний")
 
 
-# Фабричная функция для создания системы напоминаний
 def create_reminder_system(bot, database, config: ReminderConfig | None = None) -> ReminderSystem:  # noqa: ANN001
     """Создать и инициализировать систему напоминаний."""
     system = ReminderSystem(bot, database, config)
-
-    # Запланировать проверку существующих игр
     asyncio.create_task(system.schedule_all_upcoming_games())  # noqa: RUF006
-
-    logger.info("Система напоминаний инициализирована")
     return system
 
 

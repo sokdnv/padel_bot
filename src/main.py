@@ -20,6 +20,7 @@ from src.handlers import router as handlers_router
 from src.services.core import BotConfig
 from src.services.game_creation import GameCreationConfig, init_game_management
 from src.services.game_creation import router as game_creation_router
+from src.services.payments import router as payments_router
 
 # Импорты для инициализации сервисов
 from src.services.scheduler import ReminderConfig, create_reminder_system
@@ -131,14 +132,11 @@ async def setup_dispatcher(dp: Dispatcher, db: Database, bot: Bot) -> None:
     middleware = DatabaseMiddleware(db, bot)
     dp.message.middleware(middleware)
     dp.callback_query.middleware(middleware)
-    logger.info("Middleware добавлены")
 
     # Регистрация роутеров
-    dp.include_router(handlers_router)  # Основные обработчики
-    logger.info("Основные обработчики зарегистрированы")
-
-    dp.include_router(game_creation_router)  # Управление играми
-    logger.info("Обработчики управления играми зарегистрированы")
+    dp.include_router(handlers_router)
+    dp.include_router(payments_router)
+    dp.include_router(game_creation_router)
 
     logger.info("Диспетчер настроен")
 

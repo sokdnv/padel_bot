@@ -7,6 +7,7 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMar
 
 from src.config import logger
 from src.database.db import Database
+from src.keyboards import delete_keyboard
 
 
 @dataclass
@@ -229,10 +230,6 @@ class NotificationService:
         """Отправить уведомление всем пользователям."""
         stats = {"sent": 0, "failed": 0}
 
-        keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="🗑 Удалить уведомление", callback_data="delete_message")],
-        ])
-
         try:
             all_users = await db.get_all_users()
             for user_id in all_users:
@@ -243,7 +240,7 @@ class NotificationService:
                         user_id,
                         message,
                         parse_mode="HTML",
-                        reply_markup=keyboard,
+                        reply_markup=delete_keyboard,
                     )
                     stats["sent"] += 1
                 except Exception as e:  # noqa: BLE001

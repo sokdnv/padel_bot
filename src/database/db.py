@@ -1,15 +1,13 @@
 """Классы для взаимодействия с базой данных."""
 
-import logging
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import datetime
 
 import asyncpg
 
+from src.config import logger
 from src.database.queries import SQLQueries
-
-logger = logging.getLogger(__name__)
 
 
 @dataclass
