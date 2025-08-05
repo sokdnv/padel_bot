@@ -35,10 +35,10 @@ class DatabaseMiddleware(BaseMiddleware):
         super().__init__()
 
     async def __call__(  # noqa: D102
-            self,
-            handler: Callable[[TelegramObject, dict[str, Any]], Awaitable[Any]],
-            event: TelegramObject,
-            data: dict[str, Any],
+        self,
+        handler: Callable[[TelegramObject, dict[str, Any]], Awaitable[Any]],
+        event: TelegramObject,
+        data: dict[str, Any],
     ) -> Any:  # noqa: ANN401
         # Логирование входящих событий
         if isinstance(event, Message):
