@@ -11,12 +11,11 @@ from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMar
 
 from src.config import logger
 from src.database.db import Database
-from src.services.core import (
-    GameFormatter,
-    KeyboardBuilder,
-    NotificationService,
-    UserFormatter,
-)
+from src.services.core import NotificationService
+from src.shared.decorators import handle_service_errors
+from src.shared.formatters import Formatters
+from src.shared.keyboards import CommonKeyboards, PaginationHelper
+from src.shared.responses import ServiceResponse
 from src.services.scheduler import ReminderSystem
 
 router = Router()
@@ -95,61 +94,54 @@ class GameCreationService:
         self.reminder_system = reminder_system
         self.config = config or GameCreationConfig()
 
-    async def create_game(self, game_data: dict[str, Any], creator: User) -> dict[str, Any]:
+    @handle_service_errors("Ошибка создания игры")
+    async def create_game(self, game_data: dict[str, Any], creator: User) -> ServiceResponse:
         """Создать игру."""
-        result = {"success": False, "message": ""}
 
-        try:
-            # Создание игры в БД
-            success = await self.db.create_game(
-                date=game_data["date"],
-                time=game_data["time"],
-                duration=game_data["duration"],
-                location=game_data["location"],
-                court=game_data["court"],
-                admin=creator.id,
+        # Создание игры в БД
+        success = await self.db.create_game(
+            date=game_data["date"],
+            time=game_data["time"],
+            duration=game_data["duration"],
+            location=game_data["location"],
+            court=game_data["court"],
+            admin=creator.id,
+        )
+
+        if not success:
+            return ServiceResponse.error_response(
+                "❌ Ошибка создания игры. Возможно, игра на эту дату уже существует."
             )
 
-            if not success:
-                result["message"] = "❌ Ошибка создания игры. Возможно, игра на эту дату уже существует."
-                return result
+        # Автоматическая регистрация создателя
+        if self.config.auto_register_creator:
+            await self.db.register_player(game_data["date"], creator.id)
 
-            # Автоматическая регистрация создателя
-            if self.config.auto_register_creator:
-                await self.db.register_player(game_data["date"], creator.id)
+        # Планирование напоминания
+        if self.reminder_system:
+            await self.reminder_system.schedule_reminder(
+                game_data["date"].date(),
+                game_data["time"],
+            )
 
-            # Планирование напоминания
-            if self.reminder_system:
-                await self.reminder_system.schedule_reminder(
-                    game_data["date"].date(),
-                    game_data["time"],
-                )
+        return ServiceResponse.success_response(
+            "✅ Игра успешно создана",
+            data={"game_data": game_data, "creator": creator},
+            alert=False,
+        )
 
-            result["success"] = True
-            result["game_data"] = game_data
-            result["creator"] = creator
-
-            return result  # noqa: TRY300
-
-        except Exception as e:  # noqa: BLE001
-            logger.error(f"Ошибка создания игры: {e}")
-            result["message"] = "❌ Произошла ошибка при создании игры"
-            return result
-
-    async def delete_game(self, game_date: datetime, user: User) -> dict[str, Any]:
+    @handle_service_errors("Ошибка удаления игры")
+    async def delete_game(self, game_date: datetime, user: User) -> ServiceResponse:
         """Удалить игру."""
-        result = {"success": False, "message": "", "players": []}
 
         # Получить игру
         game = await self.db.get_game_by_date(game_date)
         if not game:
-            result["message"] = "❌ Игра не найдена"
-            return result
+            return ServiceResponse.error_response("❌ Игра не найдена")
 
         # Проверить права
         if game.admin != user.id:
-            result["message"] = "❌ Вы можете удалять только свои игры"
-            return result
+            return ServiceResponse.error_response("❌ Вы можете удалять только свои игры")
 
         # Получить список игроков для уведомления
         players = game.get_players()
@@ -157,13 +149,16 @@ class GameCreationService:
         # Удалить игру
         success = await self.db.delete_game(game_date, user.id)
         if success:
-            result["success"] = True
-            result["players"] = [p for p in players if p != user.id]
-            result["date_formatted"] = GameFormatter.format_date(game_date)
+            return ServiceResponse.success_response(
+                "✅ Игра удалена",
+                data={
+                    "players": [p for p in players if p != user.id],
+                    "date_formatted": Formatters.format_date(game_date),
+                },
+                alert=False,
+            )
         else:
-            result["message"] = "❌ Ошибка удаления игры"
-
-        return result
+            return ServiceResponse.error_response("❌ Ошибка удаления игры")
 
 
 class GameManagementKeyboards:
@@ -175,15 +170,13 @@ class GameManagementKeyboards:
         return InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="➕ Создать игру", callback_data="create_game")],
             [InlineKeyboardButton(text="🗑 Удаление игры", callback_data="my_created_games_0")],
-            [InlineKeyboardButton(text="🏠 Главное меню", callback_data="back_to_main")],
+            CommonKeyboards.create_back_to_main_button(),
         ])
 
     @staticmethod
     def create_cancel_keyboard() -> InlineKeyboardMarkup:
         """Клавиатура с кнопкой отмены."""
-        return InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="❌ Отмена", callback_data="back_to_main")],
-        ])
+        return CommonKeyboards.create_cancel_keyboard()
 
     @staticmethod
     async def create_my_games_keyboard(
@@ -205,18 +198,18 @@ class GameManagementKeyboards:
 
         # Кнопки с играми
         for game in games:
-            date_str = GameFormatter.format_short_date(game.date)
+            date_str = Formatters.format_short_date(game.date)
             time_str = f" в {game.time}" if game.time else ""
             button_text = f"🗑 {date_str}{time_str}"
             callback_data = f"delete_game_{game.date.strftime('%Y-%m-%d')}"
             keyboard.append([InlineKeyboardButton(text=button_text, callback_data=callback_data)])
 
         # Навигация
-        nav_buttons = KeyboardBuilder.create_navigation_buttons("my_created_games", page, total_pages)
+        nav_buttons = PaginationHelper.create_navigation_buttons("my_created_games", page, total_pages)
         if nav_buttons:
             keyboard.append(nav_buttons)
 
-        keyboard.append([InlineKeyboardButton(text="🏠 Главное меню", callback_data="back_to_main")])
+        keyboard.append(CommonKeyboards.create_back_to_main_button())
 
         return InlineKeyboardMarkup(inline_keyboard=keyboard)
 
@@ -260,42 +253,12 @@ class GameCreationMessages:
     @staticmethod
     def format_success_message(game_data: dict[str, Any]) -> str:
         """Сообщение об успешном создании."""
-        date_str = GameFormatter.format_date(game_data["date"])
-        time_str = game_data["time"].strftime("%H:%M")
-
-        duration_hours = game_data["duration"] // 60
-        duration_minutes = game_data["duration"] % 60
-        duration_str = f"{duration_hours}ч" + (f" {duration_minutes}м" if duration_minutes else "")
-
-        return (
-            f"✅ <b>Игра создана!</b>\n\n"
-            f"📅 Дата: {date_str}\n"
-            f"🕐 Время: {time_str}\n"
-            f"⏱ Продолжительность: {duration_str}\n"
-            f"📍 Локация: {game_data['location']}\n"
-            f"🎾 Корт: №{game_data['court']}\n\n"
-        )
+        return Formatters.format_game_success_message(game_data)
 
     @staticmethod
     def format_notification_message(game_data: dict[str, Any], creator: User) -> str:
         """Уведомление о новой игре."""
-        date_str = GameFormatter.format_date(game_data["date"])
-        time_str = game_data["time"].strftime("%H:%M")
-        creator_name = UserFormatter.get_display_name(creator)
-
-        duration_hours = game_data["duration"] // 60
-        duration_minutes = game_data["duration"] % 60
-        duration_str = f"{duration_hours}ч" + (f" {duration_minutes}м" if duration_minutes else "")
-
-        return (
-            f"🆕 <b>Новая игра создана!</b>\n\n"
-            f"👤 Создатель: {creator_name}\n"
-            f"📅 Дата: {date_str}\n"
-            f"🕐 Время: {time_str}\n"
-            f"⏱ Продолжительность: {duration_str}\n"
-            f"📍 Локация: {game_data['location']}\n"
-            f"🎾 Корт: №{game_data['court']}\n\n"
-        )
+        return Formatters.format_game_notification_message(game_data, creator)
 
 
 # Глобальные сервисы
@@ -428,27 +391,27 @@ async def process_court(message: Message, state: FSMContext) -> None:
         # Создание игры
         result = await game_creation_service.create_game(game_data, message.from_user)
 
-        if result["success"]:
+        if result.success:
             # Сообщение создателю
             success_text = GameCreationMessages.format_success_message(game_data)
             await message.answer(
                 success_text,
-                reply_markup=KeyboardBuilder.create_main_keyboard(),
+                reply_markup=CommonKeyboards.create_main_keyboard(),
                 parse_mode="HTML",
             )
 
-            # Уведомление всем пользователям
+            # Уведомление всем пользователям в фоне
             notification_text = GameCreationMessages.format_notification_message(
                 game_data, message.from_user,
             )
-            await NotificationService.send_to_all_users(
+            NotificationService.send_to_all_users_async(
                 game_creation_service.bot,
                 game_creation_service.db,
                 notification_text,
                 exclude_user_id=message.from_user.id,
             )
         else:
-            await message.answer(result["message"])
+            await message.answer(result.message)
 
         await state.clear()
 
@@ -486,32 +449,31 @@ async def delete_game(callback: CallbackQuery) -> None:
 
     result = await game_creation_service.delete_game(game_date, callback.from_user)
 
-    if result["success"]:
-        await callback.answer(f"✅ Игра на {result['date_formatted']} удалена", show_alert=True)
+    if result.success:
+        data = result.data or {}
+        await callback.answer(f"✅ Игра на {data.get('date_formatted', '')} удалена", show_alert=True)
 
         # Уведомить игроков об отмене
-        if result["players"]:
-            creator_name = UserFormatter.get_display_name(callback.from_user)
+        players = data.get("players", [])
+        if players:
+            creator_name = Formatters.get_display_name(callback.from_user)
             notification_text = (
                 f"❌ <b>Игра отменена</b>\n\n"
-                f"Создатель {creator_name} отменил игру на <b>{result['date_formatted']}</b>\n"
+                f"Создатель {creator_name} отменил игру на <b>{data.get('date_formatted', '')}</b>\n"
                 f"Извините за неудобства!"
             )
 
-            for player_id in result["players"]:
-                try:
-                    await game_creation_service.bot.send_message(
-                        player_id, notification_text, parse_mode="HTML",
-                    )
-                except Exception as e:  # noqa: BLE001
-                    logger.warning(f"Не удалось уведомить игрока {player_id}: {e}")
+            # Отправить уведомления игрокам в фоне
+            NotificationService.send_to_players_async(
+                game_creation_service.bot, notification_text, players
+            )
 
         # Возврат в главное меню
         text = "🎾 <b>Добро пожаловать в бот записи на падел!</b>\n\nЧто хотите сделать?"
         await callback.message.edit_text(
             text,
-            reply_markup=KeyboardBuilder.create_main_keyboard(),
+            reply_markup=CommonKeyboards.create_main_keyboard(),
             parse_mode="HTML",
         )
     else:
-        await callback.answer(result["message"], show_alert=True)
+        await callback.answer(result.message, show_alert=True)

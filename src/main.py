@@ -18,6 +18,7 @@ from src.handlers import init_handlers
 # Импорты роутеров
 from src.handlers import router as handlers_router
 from src.services.core import BotConfig
+from src.shared.decorators import log_handler_calls
 from src.services.game_creation import GameCreationConfig, init_game_management
 from src.services.game_creation import router as game_creation_router
 from src.services.payments import router as payments_router
@@ -34,6 +35,7 @@ class DatabaseMiddleware(BaseMiddleware):
         self.bot = bot
         super().__init__()
 
+    @log_handler_calls
     async def __call__(  # noqa: D102
         self,
         handler: Callable[[TelegramObject, dict[str, Any]], Awaitable[Any]],

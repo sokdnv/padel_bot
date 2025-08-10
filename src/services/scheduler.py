@@ -5,8 +5,9 @@ from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta, timezone
 
 from src.config import logger
-from src.keyboards import delete_keyboard
 from src.services.payments import send_payment_offer
+from src.shared.formatters import Formatters
+from src.shared.keyboards import CommonKeyboards
 
 
 @dataclass
@@ -17,69 +18,6 @@ class ReminderConfig:
     reminder_hours_before: int = 3
     max_upcoming_games: int = 100
 
-
-class TimeFormatter:
-    """Утилиты для форматирования времени."""
-
-    @staticmethod
-    def parse_time(time_value: str | time) -> time | None:
-        """Парсинг времени из различных форматов."""
-        if not time_value:
-            return None
-
-        if isinstance(time_value, str):
-            try:
-                return datetime.strptime(time_value, "%H:%M:%S").time()  # noqa: DTZ007
-            except ValueError:
-                try:
-                    return datetime.strptime(time_value, "%H:%M").time()  # noqa: DTZ007
-                except ValueError:
-                    return None
-
-        return time_value if isinstance(time_value, time) else None
-
-    @staticmethod
-    def format_time(time_value: str | time) -> str:
-        """Форматирование времени для отображения."""
-        if not time_value:
-            return "время не указано"
-
-        if isinstance(time_value, str):
-            return time_value[:5] if len(time_value) >= 5 else time_value  # noqa: PLR2004
-
-        return time_value.strftime("%H:%M")
-
-    @staticmethod
-    def format_date(date_value: date) -> str:
-        """Форматирование даты для отображения."""
-        return date_value.strftime("%d.%m.%Y")
-
-
-class MessageFormatter:
-    """Форматирование сообщений."""
-
-    @staticmethod
-    def format_reminder_message(
-            game_time: str | time,
-            location: str | None,
-            court: int | None,
-            player_names: list[str],
-            hours_before: int = 3,
-    ) -> str:
-        """Форматирование сообщения-напоминания."""
-        time_str = TimeFormatter.format_time(game_time)
-        location_str = location if location else "место не указано"
-        court_str = f"Корт №{court}" if court else "номер корта не указан"
-
-        return (
-            f"⏰ <b>Напоминание об игре!</b>\n\n"
-            f"🎾 Игра через {hours_before} часа\n"
-            f"🕐 {time_str}\n"
-            f"📍 {location_str}\n"
-            f"🏟️ {court_str}\n\n"
-            f"👥 {', '.join(player_names)}\n\n"
-            f"До встречи на корте! 🎾"
-        )
 
 
 class ReminderTask:
@@ -94,7 +32,7 @@ class ReminderTask:
 
     def _generate_key(self) -> str:
         """Генерация уникального ключа для задачи."""
-        time_str = TimeFormatter.format_time(self.game_time)
+        time_str = Formatters.format_time(self.game_time)
         return f"{self.game_date}_{time_str}"
 
     def cancel(self) -> None:
@@ -123,7 +61,7 @@ class ReminderSystem:
     async def schedule_reminder(self, game_date: date, game_time: str | time) -> bool:
         """Запланировать напоминание для игры."""
         try:
-            parsed_time = TimeFormatter.parse_time(game_time)
+            parsed_time = Formatters.parse_time(game_time)
             if not parsed_time:
                 logger.warning(f"Не удалось разобрать время игры: {game_time}")
                 return False
@@ -157,7 +95,7 @@ class ReminderSystem:
     async def schedule_payment_offer(self, game_date: date, game_time: str | time, duration: int = 120) -> bool:
         """Запланировать предложение оплаты после игры."""
         try:
-            parsed_time = TimeFormatter.parse_time(game_time)
+            parsed_time = Formatters.parse_time(game_time)
             if not parsed_time:
                 logger.warning(f"Не удалось разобрать время игры для оплаты: {game_time}")
                 return False
@@ -170,7 +108,7 @@ class ReminderSystem:
                 logger.debug(f"Время предложения оплаты уже прошло для игры {game_date} {game_time}")
                 return False
 
-            task_key = f"{game_date}_{TimeFormatter.format_time(game_time)}"
+            task_key = f"{game_date}_{Formatters.format_time(game_time)}"
             task = self.tasks.get(task_key)
             if not task:
                 task = ReminderTask(game_date, game_time)
@@ -227,7 +165,7 @@ class ReminderSystem:
                 for player_id in players
             ]
 
-            message = MessageFormatter.format_reminder_message(
+            message = Formatters.format_reminder_message(
                 game_time=game.time,
                 location=game.location,
                 court=game.court,
@@ -238,14 +176,14 @@ class ReminderSystem:
             success_count = 0
             for player_id in players:
                 try:
-                    await self.bot.send_message(player_id, message, parse_mode="HTML", reply_markup=delete_keyboard)
+                    await self.bot.send_message(player_id, message, parse_mode="HTML", reply_markup=CommonKeyboards.create_delete_keyboard())
                     success_count += 1
                 except Exception as e:  # noqa: BLE001
                     logger.warning(f"Не удалось отправить напоминание игроку {player_id}: {e}")
 
             logger.info(
-                f"Отправлены напоминания для игры {TimeFormatter.format_date(game_date)} "
-                f"{TimeFormatter.format_time(game.time)} ({success_count}/{len(players)} успешно)",
+                f"Отправлены напоминания для игры {Formatters.format_date(game_date)} "
+                f"{Formatters.format_time(game.time)} ({success_count}/{len(players)} успешно)",
             )
 
         except Exception:  # noqa: BLE001
@@ -264,13 +202,13 @@ class ReminderSystem:
             await send_payment_offer(
                 bot=self.bot,
                 admin_id=game.admin,
-                game_date=TimeFormatter.format_date(game_date),
-                game_time=TimeFormatter.format_time(game_time)
+                game_date=Formatters.format_date(game_date),
+                game_time=Formatters.format_time(game_time)
             )
 
             logger.info(
                 f"Отправлено предложение оплаты админу {game.admin} "
-                f"для игры {TimeFormatter.format_date(game_date)} {TimeFormatter.format_time(game_time)}",
+                f"для игры {Formatters.format_date(game_date)} {Formatters.format_time(game_time)}",
             )
 
         except Exception:  # noqa: BLE001

@@ -8,6 +8,7 @@ import asyncpg
 
 from src.config import logger
 from src.database.queries import SQLQueries
+from src.shared.decorators import database_operation
 
 
 @dataclass
@@ -175,6 +176,7 @@ class Database:
         """Получить игры, созданные пользователем."""
         return await self._execute_games_query(SQLQueries.GET_CREATED_GAMES, admin, limit, offset)
 
+    @database_operation(False)
     async def register_player(self, date: datetime, user_id: int) -> bool:
         """Записать игрока на игру."""
         async with self.get_connection() as conn:
@@ -205,6 +207,7 @@ class Database:
 
             return False
 
+    @database_operation(False)
     async def unregister_player(self, date: datetime, user_id: int) -> bool:
         """Отписать игрока от игры."""
         async with self.get_connection() as conn:
@@ -258,9 +261,7 @@ class Database:
 
     async def count_available_games_excluding_user(self, user_id: int) -> int:
         """Подсчитать количество игр со свободными местами, исключая игры пользователя."""
-        games = await self._execute_games_query(SQLQueries.GET_AVAILABLE_GAMES, 1000, 0)
-        filtered_games = [game for game in games if not game.has_player(user_id)]
-        return len(filtered_games)
+        return await self._execute_count_query(SQLQueries.COUNT_AVAILABLE_GAMES_EXCLUDING_USER, user_id)
 
     async def save_user(
         self,
@@ -286,6 +287,7 @@ class Database:
                 last_name,
             )
 
+    @database_operation(False)
     async def create_game(  # noqa: PLR0913
         self,
         date: datetime,
@@ -317,6 +319,7 @@ class Database:
             logger.exception("Ошибка создания игры")
             return False
 
+    @database_operation(False)
     async def delete_game(self, date: datetime, admin: int) -> bool:
         """Удалить игру (только создатель может удалить)."""
         try:

@@ -103,3 +103,11 @@ class SQLQueries:
         SELECT COUNT(*) FROM games
         WHERE {FUTURE_GAMES}
     """  # noqa: S608
+
+    COUNT_AVAILABLE_GAMES_EXCLUDING_USER = f"""
+        SELECT COUNT(*) FROM games
+        WHERE {FUTURE_GAMES}
+          AND {AVAILABLE_SLOTS}
+          AND {TIME_CONDITIONS}
+          AND NOT (player_1 = $1 OR player_2 = $1 OR player_3 = $1 OR player_4 = $1)
+    """  # noqa: S608

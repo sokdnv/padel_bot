@@ -7,7 +7,8 @@ from aiogram.filters import Command
 from aiogram.types import CallbackQuery, Message
 
 from src.database.db import Database
-from src.services.core import BotConfig, GameListHandler, GameService, KeyboardBuilder
+from src.services.core import BotConfig, GameListHandler, GameService
+from src.shared.keyboards import CommonKeyboards, PaginationHelper
 
 router = Router()
 
@@ -36,7 +37,7 @@ async def start_command(message: Message, db: Database) -> None:
     )
 
     text = "🎾 <b>Добро пожаловать в бот записи на падел!</b>\n\nЧто хотите сделать?"
-    await message.answer(text, reply_markup=KeyboardBuilder.create_main_keyboard(), parse_mode="HTML")
+    await message.answer(text, reply_markup=CommonKeyboards.create_main_keyboard(), parse_mode="HTML")
 
 
 @router.message(Command("games"))
@@ -66,7 +67,7 @@ async def show_my_games_callback(callback: CallbackQuery) -> None:
 async def register_menu_callback(callback: CallbackQuery, db: Database) -> None:
     """Меню записи на игру."""
     page = int(callback.data.split("_")[-1])
-    keyboard = await KeyboardBuilder.create_date_selection_keyboard(
+    keyboard = await PaginationHelper.create_date_selection_keyboard(
         db, "register", user_id=callback.from_user.id, page=page,
     )
     text = "📝 <b>Выберите дату для записи:</b>\n\n"
@@ -79,7 +80,7 @@ async def register_menu_callback(callback: CallbackQuery, db: Database) -> None:
 async def unregister_menu_callback(callback: CallbackQuery, db: Database) -> None:
     """Меню отписки от игры."""
     page = int(callback.data.split("_")[-1])
-    keyboard = await KeyboardBuilder.create_date_selection_keyboard(
+    keyboard = await PaginationHelper.create_date_selection_keyboard(
         db, "unregister", user_id=callback.from_user.id, page=page,
     )
     text = "❌ <b>Выберите дату:</b>\n\n"
@@ -98,14 +99,14 @@ async def register_player_callback(callback: CallbackQuery) -> None:
     date = datetime.strptime(date_str, "%Y-%m-%d")  # noqa: DTZ007
 
     result = await game_service.register_player(date, callback.from_user)
-    await callback.answer(result["message"], show_alert=result["alert"])
+    await callback.answer(result.message, show_alert=result.alert)
 
-    if result["success"]:
+    if result.success:
         # Вернуться в главное меню
         text = "🎾 <b>Добро пожаловать в бот записи на падел!</b>\n\nЧто хотите сделать?"
         await callback.message.edit_text(
             text,
-            reply_markup=KeyboardBuilder.create_main_keyboard(),
+            reply_markup=CommonKeyboards.create_main_keyboard(),
             parse_mode="HTML",
         )
 
@@ -120,14 +121,14 @@ async def unregister_player_callback(callback: CallbackQuery) -> None:
     date = datetime.strptime(date_str, "%Y-%m-%d")  # noqa: DTZ007
 
     result = await game_service.unregister_player(date, callback.from_user)
-    await callback.answer(result["message"], show_alert=result["alert"])
+    await callback.answer(result.message, show_alert=result.alert)
 
-    if result["success"]:
+    if result.success:
         # Вернуться в главное меню
         text = "🎾 <b>Добро пожаловать в бот записи на падел!</b>\n\nЧто хотите сделать?"
         await callback.message.edit_text(
             text,
-            reply_markup=KeyboardBuilder.create_main_keyboard(),
+            reply_markup=CommonKeyboards.create_main_keyboard(),
             parse_mode="HTML",
         )
 
@@ -138,7 +139,7 @@ async def back_to_main_callback(callback: CallbackQuery) -> None:
     text = "🎾 <b>Добро пожаловать в бот записи на падел!</b>\n\nЧто хотите сделать?"
     await callback.message.edit_text(
         text,
-        reply_markup=KeyboardBuilder.create_main_keyboard(),
+        reply_markup=CommonKeyboards.create_main_keyboard(),
         parse_mode="HTML",
     )
     await callback.answer()
