@@ -29,7 +29,10 @@ class PaymentStates(StatesGroup):
 router = Router()
 
 BANKS = [
-    "Сбербанк", "Тинькофф", "Альфа-Банк", "Другой банк",
+    "Сбербанк",
+    "Тинькофф",
+    "Альфа-Банк",
+    "Другой банк",
 ]
 
 
@@ -80,9 +83,7 @@ def create_payment_done_keyboard() -> InlineKeyboardMarkup:
 async def send_payment_offer(bot: Bot, admin_id: int, game_date: str, game_time: str) -> None:
     """Отправить предложение о сборе денег админу."""
     text = (
-        f"🎾 <b>Классно поиграли!</b>\n\n"
-        f"Игра {game_date} в {game_time} завершена.\n"
-        f"Нужна помощь в сборе денег за игру?"
+        f"🎾 <b>Классно поиграли!</b>\n\nИгра {game_date} в {game_time} завершена.\nНужна помощь в сборе денег за игру?"
     )
 
     await bot.send_message(
@@ -100,9 +101,7 @@ async def accept_payment(callback: CallbackQuery, state: FSMContext) -> None:
     await state.update_data(game_date=game_date)
 
     await callback.message.edit_text(
-        "💰 <b>Сбор денег за игру</b>\n\n"
-        "Какая была стоимость корта в рублях?\n"
-        "Введите только число:",
+        "💰 <b>Сбор денег за игру</b>\n\nКакая была стоимость корта в рублях?\nВведите только число:",
         parse_mode="HTML",
     )
     await state.set_state(PaymentStates.waiting_for_cost)
@@ -116,8 +115,7 @@ async def handle_cost(message: Message, state: FSMContext) -> None:
     await state.update_data(cost=cost)
 
     await message.reply(
-        "📱 <b>Номер для переводов</b>\n\n"
-        "Отправьте номер телефона или используйте кнопку:",
+        "📱 <b>Номер для переводов</b>\n\nОтправьте номер телефона или используйте кнопку:",
         parse_mode="HTML",
         reply_markup=create_phone_keyboard(),
     )
@@ -143,8 +141,7 @@ async def handle_phone_text(message: Message, state: FSMContext) -> None:
 async def _ask_for_bank(message: Message) -> None:
     """Запросить выбор банка."""
     await message.reply(
-        "🏦 <b>Выберите банк</b>\n\n"
-        "На какой банк переводить деньги?",
+        "🏦 <b>Выберите банк</b>\n\nНа какой банк переводить деньги?",
         parse_mode="HTML",
         reply_markup=create_banks_keyboard(),
     )
@@ -164,8 +161,7 @@ async def handle_bank(callback: CallbackQuery, state: FSMContext, bot: Bot, db) 
 
     if bank_code == "другой_банк":
         await callback.message.edit_text(
-            "🏦 <b>Название банка</b>\n\n"
-            "Напишите название банка:",
+            "🏦 <b>Название банка</b>\n\nНапишите название банка:",
             parse_mode="HTML",
         )
         await state.set_state(PaymentStates.waiting_for_custom_bank)
@@ -176,13 +172,13 @@ async def handle_bank(callback: CallbackQuery, state: FSMContext, bot: Bot, db) 
 
 
 async def _finish_payment_setup(  # noqa: PLR0913
-        callback,  # noqa: ANN001
-        state: FSMContext,
-        bot: Bot,
-        bank_name: str,
-        db,  # noqa: ANN001
-        *,
-        custom: bool = False,
+    callback,  # noqa: ANN001
+    state: FSMContext,
+    bot: Bot,
+    bank_name: str,
+    db,  # noqa: ANN001
+    *,
+    custom: bool = False,
 ) -> None:
     """Завершение настройки и отправка запросов."""
     data = await state.get_data()
@@ -223,13 +219,13 @@ async def _finish_payment_setup(  # noqa: PLR0913
 
 
 async def _send_payment_requests(  # noqa: PLR0913
-        bot: Bot,
-        database,  # noqa: ANN001
-        admin_id: int,
-        game_date: str,
-        cost_per_person: int,
-        phone: str,
-        bank_name: str,
+    bot: Bot,
+    database,  # noqa: ANN001
+    admin_id: int,
+    game_date: str,
+    cost_per_person: int,
+    phone: str,
+    bank_name: str,
 ) -> None:
     """Отправить запросы на оплату игрокам."""
     # Парсим дату и находим игру

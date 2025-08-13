@@ -43,7 +43,7 @@ class GameSlot:
         return user_id in self.get_players()
 
 
-class Database:
+class Database:  # noqa: PLR0904
     """Класс для работы с базой данных."""
 
     def __init__(self, database_url: str) -> None:  # noqa: D107

@@ -103,14 +103,11 @@ class Formatters:
 
             if game.location:
                 text += f"📍 {game.location}\n"
-            text += f"🎾 Корт №{game.court if game.court else 'не указан'}\n"
+            text += f"🎾 Корт №{game.court or 'не указан'}\n"
 
             if players_count > 0:
                 if users_info:
-                    player_names = [
-                        users_info.get(player_id, f"User{player_id}")
-                        for player_id in game.get_players()
-                    ]
+                    player_names = [users_info.get(player_id, f"User{player_id}") for player_id in game.get_players()]
                     text += f"👥 Записаны: {', '.join(player_names)}\n"
                 else:
                     text += f"👥 Записаны: {players_count} игрок(ов)\n"
@@ -121,15 +118,15 @@ class Formatters:
 
     @staticmethod
     def format_reminder_message(
-            game_time: str | time,
-            location: str | None,
-            court: int | None,
-            player_names: list[str],
-            hours_before: int = 3,
+        game_time: str | time,
+        location: str | None,
+        court: int | None,
+        player_names: list[str],
+        hours_before: int = 3,
     ) -> str:
         """Форматирование сообщения-напоминания."""
         time_str = Formatters.format_time(game_time)
-        location_str = location if location else "место не указано"
+        location_str = location or "место не указано"
         court_str = f"Корт №{court}" if court else "номер корта не указан"
 
         return (

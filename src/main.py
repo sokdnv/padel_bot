@@ -1,7 +1,6 @@
 """Основной скрипт для запуска бота."""
 
 import asyncio
-import logging
 from collections.abc import Awaitable, Callable
 from typing import Any
 
@@ -18,13 +17,13 @@ from src.handlers import init_handlers
 # Импорты роутеров
 from src.handlers import router as handlers_router
 from src.services.core import BotConfig
-from src.shared.decorators import log_handler_calls
 from src.services.game_creation import GameCreationConfig, init_game_management
 from src.services.game_creation import router as game_creation_router
 from src.services.payments import router as payments_router
 
 # Импорты для инициализации сервисов
 from src.services.scheduler import ReminderConfig, create_reminder_system
+from src.shared.decorators import log_handler_calls
 
 
 class DatabaseMiddleware(BaseMiddleware):

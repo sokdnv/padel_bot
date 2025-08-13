@@ -11,13 +11,15 @@ class CommonKeyboards:
     @staticmethod
     def create_main_keyboard() -> InlineKeyboardMarkup:
         """Создать главную клавиатуру."""
-        return InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="🟢 Все игры", callback_data="show_available_games_0")],
-            [InlineKeyboardButton(text="👤 Мои записи", callback_data="show_my_games_0")],
-            [InlineKeyboardButton(text="📝 Записаться", callback_data="register_menu_0")],
-            [InlineKeyboardButton(text="❌ Удалиться", callback_data="unregister_menu_0")],
-            [InlineKeyboardButton(text="🎮 Управление играми", callback_data="game_management")],
-        ])
+        return InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text="🟢 Все игры", callback_data="show_available_games_0")],
+                [InlineKeyboardButton(text="👤 Мои записи", callback_data="show_my_games_0")],
+                [InlineKeyboardButton(text="📝 Записаться", callback_data="register_menu_0")],
+                [InlineKeyboardButton(text="❌ Удалиться", callback_data="unregister_menu_0")],
+                [InlineKeyboardButton(text="🎮 Управление играми", callback_data="game_management")],
+            ]
+        )
 
     @staticmethod
     def create_back_to_main_button() -> list[InlineKeyboardButton]:
@@ -27,16 +29,20 @@ class CommonKeyboards:
     @staticmethod
     def create_cancel_keyboard() -> InlineKeyboardMarkup:
         """Клавиатура с кнопкой отмены."""
-        return InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="❌ Отмена", callback_data="back_to_main")],
-        ])
+        return InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text="❌ Отмена", callback_data="back_to_main")],
+            ]
+        )
 
     @staticmethod
     def create_delete_keyboard() -> InlineKeyboardMarkup:
         """Клавиатура с кнопкой удаления уведомления."""
-        return InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="🗑 Удалить уведомление", callback_data="delete_message")],
-        ])
+        return InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text="🗑 Удалить уведомление", callback_data="delete_message")],
+            ]
+        )
 
 
 class PaginationHelper:
@@ -60,10 +66,10 @@ class PaginationHelper:
 
     @staticmethod
     def create_paginated_keyboard(
-            action: str,
-            page: int,
-            total_pages: int,
-            additional_buttons: list[list[InlineKeyboardButton]] | None = None,
+        action: str,
+        page: int,
+        total_pages: int,
+        additional_buttons: list[list[InlineKeyboardButton]] | None = None,
     ) -> InlineKeyboardMarkup:
         """Создать клавиатуру со стандартной пагинацией."""
         keyboard = []
@@ -84,11 +90,11 @@ class PaginationHelper:
 
     @staticmethod
     async def create_date_selection_keyboard(
-            db: Database,
-            action: str,
-            user_id: int | None = None,
-            page: int = 0,
-            games_per_page: int = 4,
+        db: Database,
+        action: str,
+        user_id: int | None = None,
+        page: int = 0,
+        games_per_page: int = 4,
     ) -> InlineKeyboardMarkup:
         """Создать клавиатуру выбора даты с пагинацией."""
         offset = page * games_per_page
@@ -101,22 +107,23 @@ class PaginationHelper:
                 exclude_user_id=user_id,
             )
             total_count = (
-                await db.count_available_games_excluding_user(user_id)
-                if user_id else await db.count_available_games()
+                await db.count_available_games_excluding_user(user_id) if user_id else await db.count_available_games()
             )
         elif action == "unregister" and user_id:
             games = await db.get_user_games(user_id, limit=games_per_page, offset=offset)
             total_count = await db.count_user_games(user_id)
         else:
-            return InlineKeyboardMarkup(inline_keyboard=[
-                CommonKeyboards.create_back_to_main_button(),
-            ])
+            return InlineKeyboardMarkup(
+                inline_keyboard=[
+                    CommonKeyboards.create_back_to_main_button(),
+                ]
+            )
 
         keyboard = []
 
         # Кнопки с играми
         from src.shared.formatters import Formatters  # Избегаем циклического импорта
-        
+
         for game in games:
             button_text = Formatters.format_short_date(game.date)
 

@@ -9,14 +9,13 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message, User
 
-from src.config import logger
 from src.database.db import Database
 from src.services.core import NotificationService
+from src.services.scheduler import ReminderSystem
 from src.shared.decorators import handle_service_errors
 from src.shared.formatters import Formatters
 from src.shared.keyboards import CommonKeyboards, PaginationHelper
 from src.shared.responses import ServiceResponse
-from src.services.scheduler import ReminderSystem
 
 router = Router()
 
@@ -83,11 +82,11 @@ class GameCreationService:
     """Сервис создания игр."""
 
     def __init__(  # noqa: D107
-            self,
-            db: Database,
-            bot: Bot,
-            reminder_system: ReminderSystem | None = None,
-            config: GameCreationConfig | None = None,
+        self,
+        db: Database,
+        bot: Bot,
+        reminder_system: ReminderSystem | None = None,
+        config: GameCreationConfig | None = None,
     ) -> None:
         self.db = db
         self.bot = bot
@@ -97,7 +96,6 @@ class GameCreationService:
     @handle_service_errors("Ошибка создания игры")
     async def create_game(self, game_data: dict[str, Any], creator: User) -> ServiceResponse:
         """Создать игру."""
-
         # Создание игры в БД
         success = await self.db.create_game(
             date=game_data["date"],
@@ -109,9 +107,7 @@ class GameCreationService:
         )
 
         if not success:
-            return ServiceResponse.error_response(
-                "❌ Ошибка создания игры. Возможно, игра на эту дату уже существует."
-            )
+            return ServiceResponse.error_response("❌ Ошибка создания игры. Возможно, игра на эту дату уже существует.")
 
         # Автоматическая регистрация создателя
         if self.config.auto_register_creator:
@@ -133,7 +129,6 @@ class GameCreationService:
     @handle_service_errors("Ошибка удаления игры")
     async def delete_game(self, game_date: datetime, user: User) -> ServiceResponse:
         """Удалить игру."""
-
         # Получить игру
         game = await self.db.get_game_by_date(game_date)
         if not game:
@@ -157,8 +152,7 @@ class GameCreationService:
                 },
                 alert=False,
             )
-        else:
-            return ServiceResponse.error_response("❌ Ошибка удаления игры")
+        return ServiceResponse.error_response("❌ Ошибка удаления игры")
 
 
 class GameManagementKeyboards:
@@ -167,11 +161,13 @@ class GameManagementKeyboards:
     @staticmethod
     def create_main_menu() -> InlineKeyboardMarkup:
         """Главное меню управления играми."""
-        return InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="➕ Создать игру", callback_data="create_game")],
-            [InlineKeyboardButton(text="🗑 Удаление игры", callback_data="my_created_games_0")],
-            CommonKeyboards.create_back_to_main_button(),
-        ])
+        return InlineKeyboardMarkup(
+            inline_keyboard=[
+                [InlineKeyboardButton(text="➕ Создать игру", callback_data="create_game")],
+                [InlineKeyboardButton(text="🗑 Удаление игры", callback_data="my_created_games_0")],
+                CommonKeyboards.create_back_to_main_button(),
+            ]
+        )
 
     @staticmethod
     def create_cancel_keyboard() -> InlineKeyboardMarkup:
@@ -180,10 +176,10 @@ class GameManagementKeyboards:
 
     @staticmethod
     async def create_my_games_keyboard(
-            db: Database,
-            user_id: int,
-            page: int = 0,
-            config: GameCreationConfig | None = None,
+        db: Database,
+        user_id: int,
+        page: int = 0,
+        config: GameCreationConfig | None = None,
     ) -> InlineKeyboardMarkup:
         """Клавиатура с созданными пользователем играми."""
         if not config:
@@ -267,10 +263,10 @@ game_creation_config: GameCreationConfig | None = None
 
 
 def init_game_management(
-        db: Database,
-        bot: Bot,
-        reminder_system: ReminderSystem | None = None,
-        config: GameCreationConfig | None = None,
+    db: Database,
+    bot: Bot,
+    reminder_system: ReminderSystem | None = None,
+    config: GameCreationConfig | None = None,
 ) -> None:
     """Инициализировать управление играми."""
     global game_creation_service, game_creation_config  # noqa: PLW0603
@@ -362,8 +358,7 @@ async def process_duration(message: Message, state: FSMContext) -> None:
 
     except ValueError:
         await message.answer(
-            f"❌ Введите число от {game_creation_config.min_duration} "
-            f"до {game_creation_config.max_duration}",
+            f"❌ Введите число от {game_creation_config.min_duration} до {game_creation_config.max_duration}",
         )
 
 
@@ -402,7 +397,8 @@ async def process_court(message: Message, state: FSMContext) -> None:
 
             # Уведомление всем пользователям в фоне
             notification_text = GameCreationMessages.format_notification_message(
-                game_data, message.from_user,
+                game_data,
+                message.from_user,
             )
             NotificationService.send_to_all_users_async(
                 game_creation_service.bot,
@@ -430,11 +426,13 @@ async def show_my_created_games(callback: CallbackQuery, db: Database) -> None:
         offset=page * game_creation_config.games_per_page,
     )
 
-    text = ("🚫 Вы не создавали игр" if not games
-            else "🗑 <b>Мои созданные игры</b>\n\nВыберите игру для удаления:\n\n")
+    text = "🚫 Вы не создавали игр" if not games else "🗑 <b>Мои созданные игры</b>\n\nВыберите игру для удаления:\n\n"
 
     keyboard = await GameManagementKeyboards.create_my_games_keyboard(
-        db, callback.from_user.id, page, game_creation_config,
+        db,
+        callback.from_user.id,
+        page,
+        game_creation_config,
     )
 
     await callback.message.edit_text(text, reply_markup=keyboard, parse_mode="HTML")
@@ -464,9 +462,7 @@ async def delete_game(callback: CallbackQuery) -> None:
             )
 
             # Отправить уведомления игрокам в фоне
-            NotificationService.send_to_players_async(
-                game_creation_service.bot, notification_text, players
-            )
+            NotificationService.send_to_players_async(game_creation_service.bot, notification_text, players)
 
         # Возврат в главное меню
         text = "🎾 <b>Добро пожаловать в бот записи на падел!</b>\n\nЧто хотите сделать?"

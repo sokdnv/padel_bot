@@ -68,7 +68,10 @@ async def register_menu_callback(callback: CallbackQuery, db: Database) -> None:
     """Меню записи на игру."""
     page = int(callback.data.split("_")[-1])
     keyboard = await PaginationHelper.create_date_selection_keyboard(
-        db, "register", user_id=callback.from_user.id, page=page,
+        db,
+        "register",
+        user_id=callback.from_user.id,
+        page=page,
     )
     text = "📝 <b>Выберите дату для записи:</b>\n\n"
 
@@ -81,7 +84,10 @@ async def unregister_menu_callback(callback: CallbackQuery, db: Database) -> Non
     """Меню отписки от игры."""
     page = int(callback.data.split("_")[-1])
     keyboard = await PaginationHelper.create_date_selection_keyboard(
-        db, "unregister", user_id=callback.from_user.id, page=page,
+        db,
+        "unregister",
+        user_id=callback.from_user.id,
+        page=page,
     )
     text = "❌ <b>Выберите дату:</b>\n\n"
 

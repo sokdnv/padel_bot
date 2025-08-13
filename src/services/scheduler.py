@@ -19,7 +19,6 @@ class ReminderConfig:
     max_upcoming_games: int = 100
 
 
-
 class ReminderTask:
     """Управление задачами напоминания и предложения оплаты."""
 
@@ -43,10 +42,7 @@ class ReminderTask:
 
     def is_active(self) -> bool:
         """Проверка активности любой задачи."""
-        return any(
-            task is not None and not task.done()
-            for task in [self.reminder_task, self.payment_task]
-        )
+        return any(task is not None and not task.done() for task in [self.reminder_task, self.payment_task])
 
 
 class ReminderSystem:
@@ -160,10 +156,7 @@ class ReminderSystem:
 
             players = game.get_players()
             users_info = await self.database.get_users_info(players)
-            player_names = [
-                users_info.get(player_id, f"User{player_id}")
-                for player_id in players
-            ]
+            player_names = [users_info.get(player_id, f"User{player_id}") for player_id in players]
 
             message = Formatters.format_reminder_message(
                 game_time=game.time,
@@ -176,7 +169,9 @@ class ReminderSystem:
             success_count = 0
             for player_id in players:
                 try:
-                    await self.bot.send_message(player_id, message, parse_mode="HTML", reply_markup=CommonKeyboards.create_delete_keyboard())
+                    await self.bot.send_message(
+                        player_id, message, parse_mode="HTML", reply_markup=CommonKeyboards.create_delete_keyboard()
+                    )
                     success_count += 1
                 except Exception as e:  # noqa: BLE001
                     logger.warning(f"Не удалось отправить напоминание игроку {player_id}: {e}")
@@ -203,7 +198,7 @@ class ReminderSystem:
                 bot=self.bot,
                 admin_id=game.admin,
                 game_date=Formatters.format_date(game_date),
-                game_time=Formatters.format_time(game_time)
+                game_time=Formatters.format_time(game_time),
             )
 
             logger.info(
@@ -235,8 +230,7 @@ class ReminderSystem:
                             payment_count += 1
 
             logger.info(
-                f"Запланировано {reminder_count} напоминаний и "
-                f"{payment_count} предложений оплаты из {len(games)} игр",
+                f"Запланировано {reminder_count} напоминаний и {payment_count} предложений оплаты из {len(games)} игр",
             )
 
         except Exception:  # noqa: BLE001

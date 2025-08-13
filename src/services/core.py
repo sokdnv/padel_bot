@@ -1,4 +1,5 @@
 """Классы для работы бота."""
+
 import asyncio
 from dataclasses import dataclass
 from datetime import datetime
@@ -23,17 +24,15 @@ class BotConfig:
     notification_enabled: bool = True
 
 
-
-
 class NotificationService:
     """Сервис уведомлений."""
 
     @staticmethod
     async def _send_notifications_background(
-            bot: Bot,
-            db: Database,
-            message: str,
-            exclude_user_id: int | None = None,
+        bot: Bot,
+        db: Database,
+        message: str,
+        exclude_user_id: int | None = None,
     ) -> dict[str, int]:
         """Отправить уведомления в фоне."""
         stats = {"sent": 0, "failed": 0}
@@ -41,7 +40,7 @@ class NotificationService:
         try:
             all_users = await db.get_all_users()
             delete_keyboard = CommonKeyboards.create_delete_keyboard()
-            
+
             for user_id in all_users:
                 if exclude_user_id and user_id == exclude_user_id:
                     continue
@@ -63,57 +62,49 @@ class NotificationService:
 
     @staticmethod
     def send_to_all_users_async(
-            bot: Bot,
-            db: Database,
-            message: str,
-            exclude_user_id: int | None = None,
+        bot: Bot,
+        db: Database,
+        message: str,
+        exclude_user_id: int | None = None,
     ) -> None:
         """Запустить отправку уведомлений в фоне без блокировки."""
-        asyncio.create_task(
-            NotificationService._send_notifications_background(
-                bot, db, message, exclude_user_id
-            )
-        )
+        asyncio.create_task(NotificationService._send_notifications_background(bot, db, message, exclude_user_id))
 
     @staticmethod
     async def _send_to_players_background(
-            bot: Bot,
-            message: str,
-            player_ids: list[int],
+        bot: Bot,
+        message: str,
+        player_ids: list[int],
     ) -> None:
         """Отправить уведомления конкретным игрокам в фоне."""
         for player_id in player_ids:
             try:
                 await bot.send_message(
-                    player_id, message, parse_mode="HTML",
+                    player_id,
+                    message,
+                    parse_mode="HTML",
                 )
             except Exception as e:  # noqa: BLE001
                 logger.warning(f"Не удалось уведомить игрока {player_id}: {e}")
 
     @staticmethod
     def send_to_players_async(
-            bot: Bot,
-            message: str,
-            player_ids: list[int],
+        bot: Bot,
+        message: str,
+        player_ids: list[int],
     ) -> None:
         """Запустить отправку уведомлений конкретным игрокам в фоне."""
-        asyncio.create_task(
-            NotificationService._send_to_players_background(
-                bot, message, player_ids
-            )
-        )
+        asyncio.create_task(NotificationService._send_to_players_background(bot, message, player_ids))
 
     @staticmethod
     async def send_to_all_users(
-            bot: Bot,
-            db: Database,
-            message: str,
-            exclude_user_id: int | None = None,
+        bot: Bot,
+        db: Database,
+        message: str,
+        exclude_user_id: int | None = None,
     ) -> dict[str, int]:
         """Отправить уведомление всем пользователям (синхронно)."""
-        return await NotificationService._send_notifications_background(
-            bot, db, message, exclude_user_id
-        )
+        return await NotificationService._send_notifications_background(bot, db, message, exclude_user_id)
 
 
 class GameService:
@@ -136,7 +127,6 @@ class GameService:
     @handle_service_errors("Ошибка регистрации")
     async def register_player(self, game_date: datetime, user: User) -> ServiceResponse:
         """Записать игрока на игру."""
-
         # Получить игру
         game = await self.db.get_game_by_date(game_date)
         if not game:
@@ -166,21 +156,21 @@ class GameService:
             # Отправить уведомление в фоне
             if self.config.notification_enabled:
                 notification_message = (
-                    f"🎾 <b>Новая запись на игру!</b>\n\n"
-                    f"{user_name} записался/-лась на <b>{date_formatted}</b>"
+                    f"🎾 <b>Новая запись на игру!</b>\n\n{user_name} записался/-лась на <b>{date_formatted}</b>"
                 )
                 NotificationService.send_to_all_users_async(
-                    self.bot, self.db, notification_message, exclude_user_id=user.id,
+                    self.bot,
+                    self.db,
+                    notification_message,
+                    exclude_user_id=user.id,
                 )
 
             return ServiceResponse.success_response(f"✅ Вы записаны на {date_formatted}", alert=False)
-        else:
-            return ServiceResponse.error_response("❌ Ошибка записи")
+        return ServiceResponse.error_response("❌ Ошибка записи")
 
     @handle_service_errors("Ошибка отмены регистрации")
     async def unregister_player(self, game_date: datetime, user: User) -> ServiceResponse:
         """Отписать игрока от игры."""
-
         # Получить игру
         game = await self.db.get_game_by_date(game_date)
         if not game:
@@ -212,12 +202,14 @@ class GameService:
                     f"🔓 Освободилось место!"
                 )
                 NotificationService.send_to_all_users_async(
-                    self.bot, self.db, notification_message, exclude_user_id=user.id,
+                    self.bot,
+                    self.db,
+                    notification_message,
+                    exclude_user_id=user.id,
                 )
 
             return ServiceResponse.success_response(f"✅ Вы удалены из {date_formatted}", alert=False)
-        else:
-            return ServiceResponse.error_response("❌ Ошибка удаления")
+        return ServiceResponse.error_response("❌ Ошибка удаления")
 
 
 class GameListHandler:
@@ -228,10 +220,10 @@ class GameListHandler:
         self.config = config or BotConfig()
 
     async def show_available_games(
-            self,
-            message_or_callback: Message | CallbackQuery,
-            page: int = 0,
-            edit: bool = True,  # noqa: FBT001, FBT002
+        self,
+        message_or_callback: Message | CallbackQuery,
+        page: int = 0,
+        edit: bool = True,  # noqa: FBT001, FBT002
     ) -> None:
         """Показать все игры."""
         offset = page * self.config.games_per_page
@@ -248,11 +240,13 @@ class GameListHandler:
         else:
             users_info = await self.game_service.get_users_for_games(games)
             text = "🟢 <b>Все игры</b>\n\n" + await Formatters.format_games_list(
-                games, users_info,
+                games,
+                users_info,
             )
 
         # Дополнительные кнопки
         from aiogram.types import InlineKeyboardButton  # Избегаем циклического импорта
+
         additional_buttons = [
             [
                 InlineKeyboardButton(text="📝 Записаться", callback_data="register_menu_0"),
@@ -261,17 +255,20 @@ class GameListHandler:
         ]
 
         keyboard = PaginationHelper.create_paginated_keyboard(
-            "show_available_games", page, total_pages, additional_buttons,
+            "show_available_games",
+            page,
+            total_pages,
+            additional_buttons,
         )
 
         await self._send_or_edit_message(message_or_callback, text, keyboard, edit)
 
     async def show_my_games(
-            self,
-            message_or_callback: Message | CallbackQuery,
-            user_id: int,
-            page: int = 0,
-            edit: bool = True,  # noqa: FBT001, FBT002
+        self,
+        message_or_callback: Message | CallbackQuery,
+        user_id: int,
+        page: int = 0,
+        edit: bool = True,  # noqa: FBT001, FBT002
     ) -> None:
         """Показать игры пользователя."""
         offset = page * self.config.games_per_page
@@ -289,11 +286,13 @@ class GameListHandler:
         else:
             users_info = await self.game_service.get_users_for_games(games)
             text = "👤 <b>Мои игры</b>\n\n" + await Formatters.format_games_list(
-                games, users_info,
+                games,
+                users_info,
             )
 
         # Дополнительные кнопки
         from aiogram.types import InlineKeyboardButton  # Избегаем циклического импорта
+
         additional_buttons = [
             [
                 InlineKeyboardButton(text="❌ Удалиться", callback_data="unregister_menu_0"),
@@ -302,17 +301,20 @@ class GameListHandler:
         ]
 
         keyboard = PaginationHelper.create_paginated_keyboard(
-            "show_my_games", page, total_pages, additional_buttons,
+            "show_my_games",
+            page,
+            total_pages,
+            additional_buttons,
         )
 
         await self._send_or_edit_message(message_or_callback, text, keyboard, edit)
 
     @staticmethod
     async def _send_or_edit_message(
-            message_or_callback: Message | CallbackQuery,
-            text: str,
-            keyboard: Any,
-            edit: bool,  # noqa: FBT001
+        message_or_callback: Message | CallbackQuery,
+        text: str,
+        keyboard: Any,
+        edit: bool,  # noqa: FBT001
     ) -> None:
         """Отправить или редактировать сообщение."""
         if edit and hasattr(message_or_callback, "message"):
